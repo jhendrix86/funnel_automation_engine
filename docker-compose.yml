@@ -1,0 +1,223 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: traffic-funnel-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: traffic_funnel
+    networks:
+      - funnel-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: traffic-funnel-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - funnel-network
+
+  # Orchestrator Service
+  orchestrator:
+    build:
+      context: ./python-services
+      dockerfile: Dockerfile.orchestrator
+    container_name: traffic-funnel-orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URI=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+      - CONTENT_SERVICE_URL=http://content-generator:8001
+      - EMAIL_SERVICE_URL=http://email-automation:8003
+      - LEAD_SERVICE_URL=http://lead-optimizer:8002
+      - CONVERSION_SERVICE_URL=http://conversion-optimizer:8004
+      - GUMROAD_SERVICE_URL=http://gumroad-integration:8005
+      - TRAFFIC_SERVICE_URL=http://traffic-acquisition:8006
+    depends_on:
+      - mongodb
+      - redis
+      - content-generator
+      - email-automation
+      - lead-optimizer
+      - conversion-optimizer
+      - gumroad-integration
+      - traffic-acquisition
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
+  # Content Generation Service
+  content-generator:
+    build:
+      context: ./python-services
+      dockerfile: Dockerfile.content
+    container_name: traffic-funnel-content
+    ports:
+      - "8001:8001"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URI=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
+  # Lead Optimization Service
+  lead-optimizer:
+    build:
+      context: ./python-services
+      dockerfile: Dockerfile.lead
+    container_name: traffic-funnel-lead
+    ports:
+      - "8002:8002"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URI=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
+  # Email Automation Service
+  email-automation:
+    build:
+      context: ./python-services
+      dockerfile: Dockerfile.email
+    container_name: traffic-funnel-email
+    ports:
+      - "8003:8003"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URI=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
+  # Conversion Optimization Service
+  conversion-optimizer:
+    build:
+      context: ./python-services
+      dockerfile: Dockerfile.conversion
+    container_name: traffic-funnel-conversion
+    ports:
+      - "8004:8004"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URI=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
+  # Gumroad Integration Service
+  gumroad-integration:
+    build:
+      context: ./python-services
+      dockerfile: Dockerfile.gumroad
+    container_name: traffic-funnel-gumroad
+    ports:
+      - "8005:8005"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URI=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+      - GUMROAD_ACCESS_TOKEN=${GUMROAD_ACCESS_TOKEN}
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
+  # Traffic Acquisition Service
+  traffic-acquisition:
+    build:
+      context: ./python-services
+      dockerfile: Dockerfile.traffic
+    container_name: traffic-funnel-traffic
+    ports:
+      - "8006:8006"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URI=mongodb://mongodb:27017
+      - REDIS_URL=redis://redis:6379
+      - TWITTER_API_KEY=${TWITTER_API_KEY}
+      - TWITTER_API_SECRET=${TWITTER_API_SECRET}
+      - TWITTER_ACCESS_TOKEN=${TWITTER_ACCESS_TOKEN}
+      - TWITTER_ACCESS_SECRET=${TWITTER_ACCESS_SECRET}
+      - LINKEDIN_ACCESS_TOKEN=${LINKEDIN_ACCESS_TOKEN}
+      - FACEBOOK_ACCESS_TOKEN=${FACEBOOK_ACCESS_TOKEN}
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
+  # Frontend Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: traffic-funnel-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - orchestrator
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
+  # Nginx Reverse Proxy (Optional)
+  nginx:
+    image: nginx:alpine
+    container_name: traffic-funnel-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - orchestrator
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  redis_data:
+
+networks:
+  funnel-network:
+    driver: bridge
