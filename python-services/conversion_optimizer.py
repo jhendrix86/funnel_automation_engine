@@ -150,8 +150,9 @@ async def create_ab_test(request: ABTestRequest, background_tasks: BackgroundTas
 
 async def monitor_ab_test(test_id: str):
     """Monitor A/B test progress and calculate results"""
+    from bson import ObjectId
     while True:
-        test = ab_tests_collection.find_one({"_id": test_id})
+        test = ab_tests_collection.find_one({"_id": ObjectId(test_id)})
         if not test:
             break
         
@@ -188,7 +189,7 @@ async def complete_ab_test(test_id: str):
     
     # Update test
     ab_tests_collection.update_one(
-        {"_id": test_id},
+        {"_id": ObjectId(test_id)},
         {
             "$set": {
                 "status": "completed",
@@ -266,8 +267,9 @@ def calculate_statistical_significance(results: Dict) -> float:
 async def implement_winning_variant(funnel_id: str, element_type: str, variant_id: str):
     """Implement winning variant in funnel"""
     try:
+        from bson import ObjectId
         # Get variant details
-        variant = variants_collection.find_one({"_id": variant_id})
+        variant = variants_collection.find_one({"_id": ObjectId(variant_id)})
         if not variant:
             return
         
@@ -282,7 +284,7 @@ async def implement_winning_variant(funnel_id: str, element_type: str, variant_i
         }.get(element_type, 'landingPages.0.variants')
         
         funnels_collection.update_one(
-            {"_id": funnel_id},
+            {"_id": ObjectId(funnel_id)},
             {"$set": {update_field: variant['content']}}
         )
         
@@ -294,7 +296,8 @@ async def implement_winning_variant(funnel_id: str, element_type: str, variant_i
 @app.get("/ab-test/{test_id}")
 async def get_ab_test_results(test_id: str):
     """Get A/B test results"""
-    test = ab_tests_collection.find_one({"_id": test_id})
+    from bson import ObjectId
+    test = ab_tests_collection.find_one({"_id": ObjectId(test_id)})
     if not test:
         raise HTTPException(status_code=404, detail="A/B test not found")
     
@@ -327,8 +330,9 @@ async def get_ab_test_results(test_id: str):
 async def optimize_landing_page(request: LandingPageOptimization):
     """Generate AI-powered landing page optimization suggestions"""
     try:
+        from bson import ObjectId
         # Get funnel data
-        funnel = funnels_collection.find_one({"_id": request.funnel_id})
+        funnel = funnels_collection.find_one({"_id": ObjectId(request.funnel_id)})
         if not funnel:
             raise HTTPException(status_code=404, detail="Funnel not found")
         
@@ -444,7 +448,8 @@ def calculate_expected_improvement(suggestions: List[Dict]) -> float:
 async def analyze_cro(funnel_id: str, analysis_type: str = "comprehensive"):
     """Perform comprehensive CRO analysis"""
     try:
-        funnel = funnels_collection.find_one({"_id": funnel_id})
+        from bson import ObjectId
+        funnel = funnels_collection.find_one({"_id": ObjectId(funnel_id)})
         if not funnel:
             raise HTTPException(status_code=404, detail="Funnel not found")
         
@@ -583,7 +588,8 @@ async def get_active_tests(funnel_id: Optional[str] = None):
 @app.post("/ab-test/{test_id}/stop")
 async def stop_ab_test(test_id: str):
     """Stop running A/B test"""
-    test = ab_tests_collection.find_one({"_id": test_id})
+    from bson import ObjectId
+    test = ab_tests_collection.find_one({"_id": ObjectId(test_id)})
     if not test:
         raise HTTPException(status_code=404, detail="A/B test not found")
     

@@ -149,8 +149,9 @@ async def score_lead(request: LeadScoreRequest):
         next_action = suggest_next_best_action(score, request.behaviors)
         
         # Update lead in database
+        from bson import ObjectId
         leads_collection.update_one(
-            {"_id": request.lead_id},
+            {"_id": ObjectId(request.lead_id)},
             {
                 "$set": {
                     "score": score,

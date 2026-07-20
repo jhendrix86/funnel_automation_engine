@@ -21,6 +21,7 @@ app = FastAPI(title="Content Generation Service", version="1.0.0")
 
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+LLM_SERVICE_URL = os.getenv("LLM_SERVICE_URL", "http://localhost:8008")
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
@@ -152,17 +153,29 @@ async def generate_blog_post(request: ContentRequest) -> str:
     [Blog post content]
     """
     
-    response = await openai.ChatCompletion.acreate(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are an expert content writer specializing in SEO and conversion optimization."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=2000
-    )
-    
-    return response.choices[0].message.content
+    # Use LLM service
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{LLM_SERVICE_URL}/completions", json={
+            "prompt": prompt,
+            "temperature": 0.7,
+            "max_tokens": 2000
+        }) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get('content', '')
+            else:
+                # Fallback to OpenAI
+                response = await openai.ChatCompletion.acreate(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are an expert content writer specializing in SEO and conversion optimization."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+                return response.choices[0].message.content
 
 async def generate_social_post(request: ContentRequest) -> str:
     """Generate engaging social media posts"""
@@ -173,7 +186,7 @@ async def generate_social_post(request: ContentRequest) -> str:
         "facebook": {"length": 63206, "style": "engaging, conversation-starting"}
     }
     
-    platform = request.metadata.get("platform", "linkedin") if hasattr(request, 'metadata') else "linkedin"
+    platform = request.metadata.get("platform", "linkedin") if hasattr(request, 'metadata') and request.metadata else "linkedin"
     platform_config = platforms.get(platform, platforms["linkedin"])
     
     prompt = f"""
@@ -190,17 +203,29 @@ async def generate_social_post(request: ContentRequest) -> str:
     Make it engaging and shareable.
     """
     
-    response = await openai.ChatCompletion.acreate(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are a social media expert with high engagement rates."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.8,
-        max_tokens=500
-    )
-    
-    return response.choices[0].message.content
+    # Use LLM service
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{LLM_SERVICE_URL}/completions", json={
+            "prompt": prompt,
+            "temperature": 0.8,
+            "max_tokens": 1500
+        }) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get('content', '')
+            else:
+                # Fallback to OpenAI
+                response = await openai.ChatCompletion.acreate(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are a social media expert with high engagement rates."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.8,
+                    max_tokens=1500
+                )
+                return response.choices[0].message.content
 
 async def generate_email_copy(request: ContentRequest) -> str:
     """Generate high-converting email copy"""
@@ -229,17 +254,29 @@ async def generate_email_copy(request: ContentRequest) -> str:
     [Email body]
     """
     
-    response = await openai.ChatCompletion.acreate(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are an email marketing specialist with high open and click-through rates."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=1000
-    )
-    
-    return response.choices[0].message.content
+    # Use LLM service
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{LLM_SERVICE_URL}/completions", json={
+            "prompt": prompt,
+            "temperature": 0.7,
+            "max_tokens": 1000
+        }) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get('content', '')
+            else:
+                # Fallback to OpenAI
+                response = await openai.ChatCompletion.acreate(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are an email marketing specialist with high open and click-through rates."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=1000
+                )
+                return response.choices[0].message.content
 
 async def generate_landing_page(request: ContentRequest) -> str:
     """Generate high-converting landing page copy"""
@@ -260,17 +297,29 @@ async def generate_landing_page(request: ContentRequest) -> str:
     Format as complete landing page structure with clear section labels.
     """
     
-    response = await openai.ChatCompletion.acreate(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are a conversion copywriter specializing in high-converting landing pages."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=2000
-    )
-    
-    return response.choices[0].message.content
+    # Use LLM service
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{LLM_SERVICE_URL}/completions", json={
+            "prompt": prompt,
+            "temperature": 0.7,
+            "max_tokens": 2000
+        }) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get('content', '')
+            else:
+                # Fallback to OpenAI
+                response = await openai.ChatCompletion.acreate(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are a conversion copywriter specializing in high-converting landing pages."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+                return response.choices[0].message.content
 
 async def generate_ad_copy(request: ContentRequest) -> str:
     """Generate ad copy for various platforms"""
@@ -293,17 +342,29 @@ async def generate_ad_copy(request: ContentRequest) -> str:
     Focus on high click-through rates and conversions.
     """
     
-    response = await openai.ChatCompletion.acreate(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are a paid advertising specialist with high ROI campaigns."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.8,
-        max_tokens=1500
-    )
-    
-    return response.choices[0].message.content
+    # Use LLM service
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{LLM_SERVICE_URL}/completions", json={
+            "prompt": prompt,
+            "temperature": 0.8,
+            "max_tokens": 1500
+        }) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get('content', '')
+            else:
+                # Fallback to OpenAI
+                response = await openai.ChatCompletion.acreate(
+                    model="gpt-4",
+                    messages=[
+                        {"role": "system", "content": "You are a paid advertising specialist with high ROI campaigns."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.8,
+                    max_tokens=1500
+                )
+                return response.choices[0].message.content
 
 @app.post("/optimize")
 async def optimize_content(optimizer: ContentOptimizer):

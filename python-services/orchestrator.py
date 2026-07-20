@@ -9,14 +9,27 @@ import asyncio
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pymongo import MongoClient
+from bson import ObjectId
+from bson.errors import InvalidId
 import redis
 import aiohttp
 import openai
 
+
 # Initialize FastAPI app
 app = FastAPI(title="Orchestrator Service", version="1.0.0")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -30,6 +43,7 @@ LEAD_SERVICE_URL = os.getenv("LEAD_SERVICE_URL", "http://localhost:8002")
 CONVERSION_SERVICE_URL = os.getenv("CONVERSION_SERVICE_URL", "http://localhost:8004")
 GUMROAD_SERVICE_URL = os.getenv("GUMROAD_SERVICE_URL", "http://localhost:8005")
 TRAFFIC_SERVICE_URL = os.getenv("TRAFFIC_SERVICE_URL", "http://localhost:8006")
+SOCIAL_SERVICE_URL = os.getenv("SOCIAL_SERVICE_URL", "http://localhost:8007")
 
 # Initialize clients
 openai.api_key = OPENAI_API_KEY
@@ -42,13 +56,63 @@ funnels_collection = db.funnels
 orchestrator_logs_collection = db.orchestrator_logs
 automation_workflows_collection = db.automation_workflows
 
+def _to_object_id(value):
+    try:
+        return ObjectId(value)
+    except (InvalidId, TypeError):
+        return value
+
+def _serialize_doc(doc: Optional[Dict]) -> Optional[Dict]:
+    if doc is None:
+        return None
+    result = {}
+    for key, value in doc.items():
+        if isinstance(value, ObjectId):
+            result[key] = str(value)
+        elif isinstance(value, datetime):
+            result[key] = value.isoformat()
+        elif isinstance(value, dict):
+            result[key] = _serialize_doc(value)
+        elif isinstance(value, list):
+            result[key] = [
+                _serialize_doc(item) if isinstance(item, dict)
+                else str(item) if isinstance(item, ObjectId)
+                else item.isoformat() if isinstance(item, datetime)
+                else item
+                for item in value
+            ]
+        else:
+            result[key] = value
+    return result
+
+def _normalize_gumroad_product(raw: Dict) -> Dict:
+    product_id = raw.get("product_id") or raw.get("id")
+    tags = raw.get("tags") or []
+    if isinstance(tags, str):
+        tags = [tags]
+    return {
+        "product_id": product_id,
+        "name": raw.get("name", ""),
+        "description": raw.get("description", ""),
+        "price": float(raw.get("price", 0) or 0),
+        "url": raw.get("url", ""),
+        "published": raw.get("published", False),
+        "tags": tags,
+    }
+
 class FunnelCreationRequest(BaseModel):
     name: str
-    gumroad_product_id: str
+    gumroad_product_id: Optional[str] = None
     target_audience: Dict
     goals: List[str]
     budget: Optional[float] = None
     auto_launch: bool = True
+    # Product creation fields
+    create_product: bool = False
+    product_name: Optional[str] = None
+    product_description: Optional[str] = None
+    product_price: Optional[float] = None
+    product_tags: Optional[List[str]] = None
 
 class AutomationWorkflow(BaseModel):
     funnel_id: str
@@ -58,7 +122,7 @@ class AutomationWorkflow(BaseModel):
     enabled: bool = True
 
 class FunnelLaunchRequest(BaseModel):
-    funnel_id: str
+    funnel_id: Optional[str] = None
     launch_traffic: bool = True
     launch_email_campaign: bool = True
     launch_seo: bool = True
@@ -84,18 +148,38 @@ async def resume_paused_workflows():
 
 @app.post("/funnel/create")
 async def create_autonomous_funnel(request: FunnelCreationRequest, background_tasks: BackgroundTasks):
-    """Create a fully autonomous funnel from Gumroad product"""
+    """Create a fully autonomous funnel from Gumroad product or create new product"""
     try:
-        # Step 1: Fetch Gumroad product details
-        product = await fetch_gumroad_product(request.gumroad_product_id)
-        if not product:
-            raise HTTPException(status_code=404, detail="Gumroad product not found")
+        product_id = request.gumroad_product_id
+        product = None
+        
+        # Step 1: Create product if requested
+        if request.create_product:
+            if not all([request.product_name, request.product_description, request.product_price]):
+                raise HTTPException(status_code=400, detail="Product name, description, and price are required when create_product is true")
+            
+            # Create product via Gumroad service
+            product = await create_gumroad_product(
+                request.product_name,
+                request.product_description,
+                request.product_price,
+                request.product_tags or [],
+                funnel_id=None  # Will set after funnel creation
+            )
+            product_id = product['product_id']
+        else:
+            # Step 1: Fetch Gumroad product details
+            if not product_id:
+                raise HTTPException(status_code=400, detail="gumroad_product_id is required when create_product is false")
+            product = await fetch_gumroad_product(product_id)
+            if not product:
+                raise HTTPException(status_code=404, detail="Gumroad product not found")
         
         # Step 2: Create funnel structure
         funnel_id = await create_funnel_structure(request, product)
         
         # Step 3: Map product to funnel
-        await map_product_to_funnel(request.gumroad_product_id, funnel_id)
+        await map_product_to_funnel(product_id, funnel_id)
         
         # Step 4: Generate initial content
         content_tasks = await generate_initial_content(funnel_id, product, request.target_audience)
@@ -106,47 +190,103 @@ async def create_autonomous_funnel(request: FunnelCreationRequest, background_ta
         # Step 6: Configure lead scoring
         lead_setup = await configure_lead_scoring(funnel_id)
         
-        # Step 7: Create automation workflow
+        # Step 7: Set up social media automation
+        social_setup = await setup_social_media_automation(funnel_id, product, request.target_audience)
+        
+        # Step 8: Create automation workflow
         workflow_id = await create_automation_workflow(funnel_id, request)
         
         # Step 8: Launch if auto_launch is enabled
         if request.auto_launch:
-            background_tasks.add_task(launch_funnel, funnel_id, FunnelLaunchRequest(
-                funnel_id=funnel_id,
-                launch_traffic=True,
-                launch_email_campaign=True,
-                launch_seo=True
-            ))
+            background_tasks.add_task(
+                _execute_funnel_launch,
+                funnel_id,
+                FunnelLaunchRequest(
+                    funnel_id=funnel_id,
+                    launch_traffic=True,
+                    launch_email_campaign=True,
+                    launch_seo=True
+                ),
+            )
         
         return {
             "funnel_id": funnel_id,
             "workflow_id": workflow_id,
+            "product_id": product_id,
             "status": "created",
             "message": "Autonomous funnel created successfully",
             "components": {
                 "content_generated": len(content_tasks),
                 "email_automation": email_setup,
                 "lead_scoring": lead_setup,
-                "auto_launched": request.auto_launch
+                "auto_launched": request.auto_launch,
+                "product_created": request.create_product
             }
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
+        import traceback
+        print(f"Error creating funnel: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 async def fetch_gumroad_product(product_id: str) -> Optional[Dict]:
-    """Fetch product from Gumroad service"""
+    """Fetch product from synced MongoDB data or Gumroad product list API."""
     try:
+        cached = db.gumroad_products.find_one({"product_id": product_id})
+        if cached:
+            return _normalize_gumroad_product(cached)
+
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{GUMROAD_SERVICE_URL}/products") as response:
+            async with session.post(f"{GUMROAD_SERVICE_URL}/sync/products") as sync_response:
+                pass
+
+        cached = db.gumroad_products.find_one({"product_id": product_id})
+        if cached:
+            return _normalize_gumroad_product(cached)
+
+        gumroad_token = os.getenv("GUMROAD_ACCESS_TOKEN")
+        if not gumroad_token:
+            return None
+
+        async with aiohttp.ClientSession() as session:
+            url = "https://api.gumroad.com/v2/products"
+            headers = {"Authorization": f"Bearer {gumroad_token}"}
+            async with session.get(url, headers=headers) as response:
                 if response.status == 200:
                     data = await response.json()
-                    for product in data.get('products', []):
-                        if product['product_id'] == product_id:
-                            return product
+                    for product in data.get("products", []):
+                        if product.get("id") == product_id:
+                            return _normalize_gumroad_product(product)
         return None
-    except:
+    except Exception as e:
+        print(f"Error fetching Gumroad product: {str(e)}")
         return None
+
+async def create_gumroad_product(name: str, description: str, price: float, tags: List[str], funnel_id: Optional[str] = None) -> Dict:
+    """Create a new product via Gumroad service"""
+    try:
+        payload = {
+            "name": name,
+            "description": description,
+            "price": price,
+            "tags": tags,
+            "published": False,
+            "funnel_id": funnel_id
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{GUMROAD_SERVICE_URL}/product/create", json=payload) as response:
+                if response.status != 200:
+                    error_data = await response.json()
+                    raise HTTPException(status_code=response.status, detail=error_data.get('message', 'Failed to create product'))
+                
+                data = await response.json()
+                return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 async def create_funnel_structure(request: FunnelCreationRequest, product: Dict) -> str:
     """Create funnel structure in database"""
@@ -290,6 +430,32 @@ async def configure_lead_scoring(funnel_id: str) -> Dict:
         print(f"Error configuring lead scoring: {str(e)}")
         return {"status": "failed"}
 
+async def setup_social_media_automation(funnel_id: str, product: Dict, target_audience: Dict) -> Dict:
+    """Set up social media automation for funnel"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Create social media campaign
+            from datetime import datetime, timedelta
+            start_date = datetime.now()
+            end_date = start_date + timedelta(days=30)
+            
+            campaign_payload = {
+                "name": f"Auto Campaign for {product['name']}",
+                "funnel_id": funnel_id,
+                "platforms": ["twitter", "linkedin"],
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "posts_per_day": 2
+            }
+            
+            async with session.post(f"{SOCIAL_SERVICE_URL}/campaign/create", json=campaign_payload) as response:
+                if response.status == 200:
+                    return {"status": "configured", "funnel_id": funnel_id}
+                return {"status": "failed"}
+    except Exception as e:
+        print(f"Error setting up social media automation: {str(e)}")
+        return {"status": "failed"}
+
 async def create_automation_workflow(funnel_id: str, request: FunnelCreationRequest) -> str:
     """Create automation workflow for funnel"""
     workflow_doc = {
@@ -316,55 +482,59 @@ async def create_automation_workflow(funnel_id: str, request: FunnelCreationRequ
     result = automation_workflows_collection.insert_one(workflow_doc)
     return str(result.inserted_id)
 
-@app.post("/funnel/launch")
-async def launch_funnel(funnel_id: str, request: FunnelLaunchRequest, background_tasks: BackgroundTasks):
+@app.post("/funnel/{funnel_id}/launch")
+async def launch_funnel_endpoint(funnel_id: str, request: FunnelLaunchRequest, background_tasks: BackgroundTasks):
     """Launch autonomous funnel operations"""
     try:
-        funnel = funnels_collection.find_one({"_id": funnel_id})
-        if not funnel:
-            raise HTTPException(status_code=404, detail="Funnel not found")
-        
-        tasks_completed = []
-        
-        # Launch traffic campaign
-        if request.launch_traffic:
-            traffic_campaign = await launch_traffic_campaign(funnel_id, funnel)
-            tasks_completed.append(f"Traffic campaign: {traffic_campaign}")
-        
-        # Launch email campaign
-        if request.launch_email_campaign:
-            email_campaign = await launch_email_campaign(funnel_id)
-            tasks_completed.append(f"Email campaign: {email_campaign}")
-        
-        # Launch SEO
-        if request.launch_seo:
-            seo_campaign = await launch_seo_campaign(funnel_id)
-            tasks_completed.append(f"SEO campaign: {seo_campaign}")
-        
-        # Update funnel status
-        funnels_collection.update_one(
-            {"_id": funnel_id},
-            {
-                "$set": {
-                    "status": "active",
-                    "launched_at": datetime.now(),
-                    "automation.last_run": datetime.now()
-                }
-            }
-        )
-        
-        # Start continuous optimization
-        background_tasks.add_task(run_continuous_optimization, funnel_id)
-        
-        return {
-            "funnel_id": funnel_id,
-            "status": "launched",
-            "message": "Funnel launched successfully",
-            "tasks_completed": tasks_completed
-        }
-        
+        return await _execute_funnel_launch(funnel_id, request, background_tasks)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+async def _execute_funnel_launch(funnel_id: str, request: FunnelLaunchRequest, background_tasks: Optional[BackgroundTasks] = None):
+    """Internal launch logic shared by API endpoint and background tasks."""
+    funnel_oid = _to_object_id(funnel_id)
+    funnel = funnels_collection.find_one({"_id": funnel_oid})
+    if not funnel:
+        raise HTTPException(status_code=404, detail="Funnel not found")
+
+    tasks_completed = []
+
+    if request.launch_traffic:
+        traffic_campaign = await launch_traffic_campaign(funnel_id, funnel)
+        tasks_completed.append(f"Traffic campaign: {traffic_campaign}")
+
+    if request.launch_email_campaign:
+        email_campaign = await launch_email_campaign(funnel_id)
+        tasks_completed.append(f"Email campaign: {email_campaign}")
+
+    if request.launch_seo:
+        seo_campaign = await launch_seo_campaign(funnel_id)
+        tasks_completed.append(f"SEO campaign: {seo_campaign}")
+
+    funnels_collection.update_one(
+        {"_id": funnel_oid},
+        {
+            "$set": {
+                "status": "active",
+                "launched_at": datetime.now(),
+                "automation.last_run": datetime.now()
+            }
+        }
+    )
+
+    if background_tasks:
+        background_tasks.add_task(run_continuous_optimization, funnel_id)
+    else:
+        asyncio.create_task(run_continuous_optimization(funnel_id))
+
+    return {
+        "funnel_id": funnel_id,
+        "status": "launched",
+        "message": "Funnel launched successfully",
+        "tasks_completed": tasks_completed
+    }
 
 async def launch_traffic_campaign(funnel_id: str, funnel: Dict) -> str:
     """Launch traffic campaign"""
@@ -444,7 +614,7 @@ async def run_continuous_optimization(funnel_id: str):
     """Run continuous optimization loop"""
     while True:
         try:
-            funnel = funnels_collection.find_one({"_id": funnel_id})
+            funnel = funnels_collection.find_one({"_id": _to_object_id(funnel_id)})
             if not funnel or funnel.get('status') != 'active':
                 break
             
@@ -527,7 +697,7 @@ async def optimize_content(funnel_id: str):
 async def update_funnel_analytics(funnel_id: str):
     """Update funnel analytics"""
     try:
-        funnel = funnels_collection.find_one({"_id": funnel_id})
+        funnel = funnels_collection.find_one({"_id": _to_object_id(funnel_id)})
         
         # Get Gumroad sales
         gumroad_sales = list(db.gumroad_sales.find({"funnel_id": funnel_id}))
@@ -547,7 +717,7 @@ async def update_funnel_analytics(funnel_id: str):
         conversion_rate = (total_conversions / total_visitors * 100) if total_visitors > 0 else 0
         
         funnels_collection.update_one(
-            {"_id": funnel_id},
+            {"_id": _to_object_id(funnel_id)},
             {
                 "$set": {
                     "analytics.visitors": total_visitors,
@@ -602,7 +772,7 @@ async def execute_workflow_endpoint(workflow_id: str, background_tasks: Backgrou
 async def execute_workflow(workflow_id: str):
     """Execute automation workflow"""
     try:
-        workflow = automation_workflows_collection.find_one({"_id": workflow_id})
+        workflow = automation_workflows_collection.find_one({"_id": _to_object_id(workflow_id)})
         if not workflow:
             return
         
@@ -615,7 +785,7 @@ async def execute_workflow(workflow_id: str):
         
         # Update workflow
         automation_workflows_collection.update_one(
-            {"_id": workflow_id},
+            {"_id": _to_object_id(workflow_id)},
             {
                 "$set": {
                     "last_run": datetime.now(),
@@ -652,13 +822,13 @@ async def get_funnels(status: Optional[str] = None):
     if status:
         query['status'] = status
     
-    funnels = list(funnels_collection.find(query))
+    funnels = [_serialize_doc(funnel) for funnel in funnels_collection.find(query)]
     return {"funnels": funnels}
 
 @app.get("/funnel/{funnel_id}")
 async def get_funnel(funnel_id: str):
     """Get specific funnel details"""
-    funnel = funnels_collection.find_one({"_id": funnel_id})
+    funnel = funnels_collection.find_one({"_id": _to_object_id(funnel_id)})
     if not funnel:
         raise HTTPException(status_code=404, detail="Funnel not found")
     
@@ -667,20 +837,20 @@ async def get_funnel(funnel_id: str):
     traffic_campaigns = list(db.traffic_campaigns.find({"funnel_id": funnel_id}))
     
     return {
-        "funnel": funnel,
-        "workflows": workflows,
-        "traffic_campaigns": traffic_campaigns
+        "funnel": _serialize_doc(funnel),
+        "workflows": [_serialize_doc(w) for w in workflows],
+        "traffic_campaigns": [_serialize_doc(c) for c in traffic_campaigns]
     }
 
 @app.get("/analytics/{funnel_id}")
 async def get_funnel_analytics(funnel_id: str):
     """Get comprehensive funnel analytics"""
-    funnel = funnels_collection.find_one({"_id": funnel_id})
+    funnel = funnels_collection.find_one({"_id": _to_object_id(funnel_id)})
     if not funnel:
         raise HTTPException(status_code=404, detail="Funnel not found")
     
     # Gumroad analytics
-    gumroad_product = db.gumroad_products_collection.find_one({"funnel_id": funnel_id})
+    gumroad_product = db.gumroad_products.find_one({"funnel_id": funnel_id})
     gumroad_sales = list(db.gumroad_sales.find({"funnel_id": funnel_id}))
     
     # Traffic analytics
@@ -693,7 +863,7 @@ async def get_funnel_analytics(funnel_id: str):
     email_campaigns = list(db.email_campaigns.find({"funnel_id": funnel_id}))
     
     return {
-        "funnel": funnel,
+        "funnel": _serialize_doc(funnel),
         "analytics": funnel.get('analytics', {}),
         "gumroad": {
             "product": gumroad_product,
@@ -714,11 +884,34 @@ async def get_funnel_analytics(funnel_id: str):
         }
     }
 
+@app.delete("/funnel/{funnel_id}")
+async def delete_funnel(funnel_id: str):
+    """Delete a funnel and all associated data"""
+    try:
+        # Delete funnel
+        funnels_collection.delete_one({"_id": _to_object_id(funnel_id)})
+        
+        # Delete associated workflows
+        automation_workflows_collection.delete_many({"funnel_id": funnel_id})
+        
+        # Delete associated traffic campaigns
+        db.traffic_campaigns.delete_many({"funnel_id": funnel_id})
+        
+        # Delete associated email campaigns
+        db.email_campaigns.delete_many({"funnel_id": funnel_id})
+        
+        # Delete associated leads
+        db.leads.delete_many({"funnel_id": funnel_id})
+        
+        return {"status": "deleted", "message": "Funnel and all associated data deleted"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/funnel/{funnel_id}/pause")
 async def pause_funnel(funnel_id: str):
     """Pause funnel operations"""
     funnels_collection.update_one(
-        {"_id": funnel_id},
+        {"_id": _to_object_id(funnel_id)},
         {"$set": {"status": "paused"}}
     )
     
@@ -734,7 +927,7 @@ async def pause_funnel(funnel_id: str):
 async def resume_funnel(funnel_id: str, background_tasks: BackgroundTasks):
     """Resume funnel operations"""
     funnels_collection.update_one(
-        {"_id": funnel_id},
+        {"_id": _to_object_id(funnel_id)},
         {"$set": {"status": "active"}}
     )
     

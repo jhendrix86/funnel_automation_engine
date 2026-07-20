@@ -168,7 +168,8 @@ async def create_campaign(campaign: EmailCampaign, background_tasks: BackgroundT
     """Create email campaign with automation"""
     try:
         # Get template
-        template = email_templates_collection.find_one({"_id": campaign.template_id})
+        from bson import ObjectId
+        template = email_templates_collection.find_one({"_id": ObjectId(campaign.template_id)})
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
         
@@ -209,7 +210,8 @@ async def create_campaign(campaign: EmailCampaign, background_tasks: BackgroundT
 
 async def execute_campaign(campaign_id: str):
     """Execute email campaign"""
-    campaign = email_campaigns_collection.find_one({"_id": campaign_id})
+    from bson import ObjectId
+    campaign = email_campaigns_collection.find_one({"_id": ObjectId(campaign_id)})
     if not campaign:
         return
     
@@ -220,7 +222,7 @@ async def execute_campaign(campaign_id: str):
     for lead in leads:
         await send_personalized_email(lead, campaign)
     
-    # Update campaign status
+    # Update camObjectId(paign statu)s
     email_campaigns_collection.update_one(
         {"_id": campaign_id},
         {"$set": {"status": "completed", "completed_at": datetime.now()}}
@@ -267,7 +269,7 @@ async def send_personalized_email(lead: Dict, campaign: Dict):
         
         # Update campaign stats
         email_campaigns_collection.update_one(
-            {"_id": campaign['_id']},
+            {"_id": ObjectId(campaign['_id'])},
             {"$inc": {"stats.total_sends": 1, "stats.delivered": 1}}
         )
         
@@ -321,13 +323,14 @@ async def send_email(to_email: str, subject: str, body: str):
 async def create_personalized_email(email: PersonalizedEmail):
     """Create and send personalized email immediately"""
     try:
+        from bson import ObjectId
         # Get lead
-        lead = db.leads.find_one({"_id": email.lead_id})
+        lead = db.leads.find_one({"_id": ObjectId(email.lead_id)})
         if not lead:
             raise HTTPException(status_code=404, detail="Lead not found")
         
         # Get template
-        template = email_templates_collection.find_one({"_id": email.template_id})
+        template = email_templates_collection.find_one({"_id": ObjectId(email.template_id)})
         if not template:
             raise HTTPException(status_code=404, detail="Template not found")
         
@@ -393,7 +396,8 @@ async def create_ab_test(request: ABTestRequest):
 @app.get("/ab-test/{test_id}")
 async def get_ab_test_results(test_id: str):
     """Get A/B test results"""
-    test = db.ab_tests.find_one({"_id": test_id})
+    from bson import ObjectId
+    test = db.ab_tests.find_one({"_id": ObjectId(test_id)})
     if not test:
         raise HTTPException(status_code=404, detail="A/B test not found")
     

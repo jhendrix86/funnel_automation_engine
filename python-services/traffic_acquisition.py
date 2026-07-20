@@ -130,7 +130,8 @@ async def create_traffic_campaign(campaign: TrafficCampaign, background_tasks: B
 
 async def launch_social_campaign(campaign_id: str, campaign: TrafficCampaign, platform: str):
     """Launch social media automation campaign"""
-    funnel = db.funnels.find_one({"_id": campaign.funnel_id})
+    from bson import ObjectId
+    funnel = db.funnels.find_one({"_id": ObjectId(campaign.funnel_id)})
     if not funnel:
         return
     
@@ -230,7 +231,8 @@ async def schedule_social_post(post_id: str, delay_seconds: float):
     """Schedule and execute social media post"""
     await asyncio.sleep(delay_seconds)
     
-    post = social_posts_collection.find_one({"_id": post_id})
+    from bson import ObjectId
+    post = social_posts_collection.find_one({"_id": ObjectId(post_id)})
     if not post or post['status'] != 'scheduled':
         return
     
@@ -250,13 +252,13 @@ async def schedule_social_post(post_id: str, delay_seconds: float):
             )
         else:
             social_posts_collection.update_one(
-                {"_id": post_id},
+                {"_id": ObjectId(post_id)},
                 {"$set": {"status": "failed"}}
             )
     except Exception as e:
         print(f"Error posting to social media: {str(e)}")
         social_posts_collection.update_one(
-            {"_id": post_id},
+            {"_id": ObjectId(post_id)},
             {"$set": {"status": "failed"}}
         )
 
@@ -412,7 +414,8 @@ async def generate_seo_content_ideas(funnel: Dict, keywords: List[str]) -> List[
 
 async def launch_ad_campaign(campaign_id: str, campaign: TrafficCampaign):
     """Launch paid advertising campaign"""
-    funnel = db.funnels.find_one({"_id": campaign.funnel_id})
+    from bson import ObjectId
+    funnel = db.funnels.find_one({"_id": ObjectId(campaign.funnel_id)})
     if not funnel:
         return
     
@@ -466,7 +469,8 @@ async def generate_ad_creatives(campaign: TrafficCampaign, funnel: Dict) -> List
 async def create_social_post(request: SocialPostRequest, background_tasks: BackgroundTasks):
     """Create and schedule individual social post"""
     try:
-        funnel = db.funnels.find_one({"_id": request.funnel_id})
+        from bson import ObjectId
+        funnel = db.funnels.find_one({"_id": ObjectId(request.funnel_id)})
         if not funnel:
             raise HTTPException(status_code=404, detail="Funnel not found")
         
@@ -518,7 +522,8 @@ async def create_social_post(request: SocialPostRequest, background_tasks: Backg
 async def create_seo_tasks(request: SEOTaskRequest):
     """Create SEO optimization tasks"""
     try:
-        funnel = db.funnels.find_one({"_id": request.funnel_id})
+        from bson import ObjectId
+        funnel = db.funnels.find_one({"_id": ObjectId(request.funnel_id)})
         if not funnel:
             raise HTTPException(status_code=404, detail="Funnel not found")
         
@@ -608,7 +613,8 @@ async def get_campaign_analytics(campaign_id: str):
 async def optimize_campaign(campaign_id: str):
     """Auto-optimize campaign based on performance"""
     try:
-        campaign = traffic_campaigns_collection.find_one({"_id": campaign_id})
+        from bson import ObjectId
+        campaign = traffic_campaigns_collection.find_one({"_id": ObjectId(campaign_id)})
         if not campaign:
             raise HTTPException(status_code=404, detail="Campaign not found")
         

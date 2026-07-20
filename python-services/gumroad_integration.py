@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from pymongo import MongoClient
+from bson import ObjectId
+from datetime import datetime as dt
 import redis
 import aiohttp
 import openai
@@ -33,6 +35,29 @@ db = mongo_client.traffic_funnel
 gumroad_products_collection = db.gumroad_products
 gumroad_sales_collection = db.gumroad_sales
 gumroad_customers_collection = db.gumroad_customers
+
+def _serialize_doc(doc):
+    if doc is None:
+        return None
+    result = {}
+    for key, value in doc.items():
+        if isinstance(value, ObjectId):
+            result[key] = str(value)
+        elif isinstance(value, dt):
+            result[key] = value.isoformat()
+        elif isinstance(value, dict):
+            result[key] = _serialize_doc(value)
+        elif isinstance(value, list):
+            result[key] = [
+                _serialize_doc(item) if isinstance(item, dict)
+                else str(item) if isinstance(item, ObjectId)
+                else item.isoformat() if isinstance(item, dt)
+                else item
+                for item in value
+            ]
+        else:
+            result[key] = value
+    return result
 
 class GumroadProduct(BaseModel):
     product_id: str
@@ -68,6 +93,24 @@ class FunnelMapping(BaseModel):
     funnel_id: str
     auto_sync: bool = True
     lead_source: str = "gumroad"
+
+class ProductCreationRequest(BaseModel):
+    name: str
+    description: str
+    price: float
+    tags: List[str] = []
+    published: bool = False
+    funnel_id: Optional[str] = None
+
+class ProductResearchRequest(BaseModel):
+    niche: str
+    target_audience: str
+    price_range: Optional[tuple] = None
+    competitors: Optional[List[str]] = None
+
+class ProductPublishRequest(BaseModel):
+    product_id: str
+    publish: bool = True
 
 @app.post("/sync/products")
 async def sync_products(background_tasks: BackgroundTasks):
@@ -294,7 +337,8 @@ async def update_product_analytics():
         conversion_rate = 0.0
         
         if funnel_id:
-            funnel = db.funnels.find_one({"_id": funnel_id})
+            from bson import ObjectId
+            funnel = db.funnels.find_one({"_id": ObjectId(funnel_id)})
             if funnel:
                 visitors = funnel.get('analytics', {}).get('visitors', 0)
                 conversion_rate = (total_sales / visitors * 100) if visitors > 0 else 0.0
@@ -321,7 +365,8 @@ async def map_product_to_funnel(mapping: FunnelMapping):
             raise HTTPException(status_code=404, detail="Product not found")
         
         # Check if funnel exists
-        funnel = db.funnels.find_one({"_id": mapping.funnel_id})
+        from bson import ObjectId
+        funnel = db.funnels.find_one({"_id": ObjectId(mapping.funnel_id)})
         if not funnel:
             raise HTTPException(status_code=404, detail="Funnel not found")
         
@@ -365,7 +410,7 @@ async def get_products(funnel_id: Optional[str] = None):
         query['funnel_id'] = funnel_id
     
     products = list(gumroad_products_collection.find(query))
-    return {"products": products}
+    return {"products": [_serialize_doc(product) for product in products]}
 
 @app.get("/sales")
 async def get_sales(product_id: Optional[str] = None, funnel_id: Optional[str] = None):
@@ -435,6 +480,173 @@ async def enable_auto_sync():
             "message": "Auto-sync completed for all mapped products"
         }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/product/create")
+async def create_product(request: ProductCreationRequest):
+    """Create a new product on Gumroad"""
+    try:
+        if not GUMROAD_ACCESS_TOKEN:
+            raise HTTPException(status_code=400, detail="Gumroad access token not configured")
+        
+        # Create product via Gumroad API
+        url = "https://api.gumroad.com/v2/products"
+        headers = {"Authorization": f"Bearer {GUMROAD_ACCESS_TOKEN}"}
+        
+        payload = {
+            "name": request.name,
+            "description": request.description,
+            "price": request.price,
+            "tags": request.tags,
+            "published": request.published
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=payload) as response:
+                if response.status != 200:
+                    error_data = await response.json()
+                    raise HTTPException(status_code=response.status, detail=error_data.get('message', 'Failed to create product'))
+                
+                data = await response.json()
+                product_id = data.get('id')
+                
+                # Store in MongoDB
+                product_doc = {
+                    "product_id": product_id,
+                    "name": request.name,
+                    "description": request.description,
+                    "price": request.price,
+                    "url": data.get('url', ''),
+                    "published": request.published,
+                    "tags": request.tags,
+                    "created_at": datetime.now(),
+                    "updated_at": datetime.now(),
+                    "stats": {
+                        "total_sales": 0,
+                        "total_revenue": 0.0,
+                        "conversion_rate": 0.0
+                    }
+                }
+                
+                if request.funnel_id:
+                    product_doc["funnel_id"] = request.funnel_id
+                    # Create funnel mapping
+                    mapping_doc = {
+                        "product_id": product_id,
+                        "funnel_id": request.funnel_id,
+                        "auto_sync": True,
+                        "lead_source": "gumroad",
+                        "created_at": datetime.now()
+                    }
+                    db.funnel_mappings.insert_one(mapping_doc)
+                
+                gumroad_products_collection.insert_one(product_doc)
+                
+                return {
+                    "status": "success",
+                    "product_id": product_id,
+                    "message": "Product created successfully",
+                    "product": _serialize_doc(product_doc)
+                }
+                
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/product/research")
+async def research_product(request: ProductResearchRequest):
+    """Research product ideas using AI"""
+    try:
+        if not OPENAI_API_KEY:
+            raise HTTPException(status_code=400, detail="OpenAI API key not configured")
+        
+        # Build research prompt
+        prompt = f"""
+        Research and analyze product ideas for the following niche:
+        Niche: {request.niche}
+        Target Audience: {request.target_audience}
+        """
+        
+        if request.price_range:
+            prompt += f"\nPrice Range: ${request.price_range[0]} - ${request.price_range[1]}"
+        
+        if request.competitors:
+            prompt += f"\nCompetitors: {', '.join(request.competitors)}"
+        
+        prompt += """
+        
+        Provide:
+        1. Top 5 product ideas with descriptions
+        2. Recommended pricing for each
+        3. Key features to include
+        4. Target pain points to address
+        5. Marketing angles
+        6. Potential challenges
+        """
+        
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert product researcher and market analyst."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=2000
+        )
+        
+        research_data = response.choices[0].message.content
+        
+        # Store research in database
+        research_doc = {
+            "niche": request.niche,
+            "target_audience": request.target_audience,
+            "price_range": request.price_range,
+            "competitors": request.competitors,
+            "research_data": research_data,
+            "created_at": datetime.now()
+        }
+        
+        db.product_research.insert_one(research_doc)
+        
+        return {
+            "status": "success",
+            "research": research_data,
+            "created_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/product/publish")
+async def publish_product(request: ProductPublishRequest):
+    """Publish or unpublish a product on Gumroad"""
+    try:
+        if not GUMROAD_ACCESS_TOKEN:
+            raise HTTPException(status_code=400, detail="Gumroad access token not configured")
+        
+        # Update product via Gumroad API
+        url = f"https://api.gumroad.com/v2/products/{request.product_id}"
+        headers = {"Authorization": f"Bearer {GUMROAD_ACCESS_TOKEN}"}
+        
+        payload = {"published": request.publish}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.put(url, headers=headers, json=payload) as response:
+                if response.status != 200:
+                    error_data = await response.json()
+                    raise HTTPException(status_code=response.status, detail=error_data.get('message', 'Failed to update product'))
+                
+                # Update in MongoDB
+                gumroad_products_collection.update_one(
+                    {"product_id": request.product_id},
+                    {"$set": {"published": request.publish, "updated_at": datetime.now()}}
+                )
+                
+                return {
+                    "status": "success",
+                    "message": f"Product {'published' if request.publish else 'unpublished'} successfully"
+                }
+                
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Play, Pause, BarChart3, Users, DollarSign, TrendingUp } from 'lucide-react'
+import { Play, Pause, BarChart3, Users, DollarSign, TrendingUp, Trash2 } from 'lucide-react'
 
 interface Funnel {
   _id: string
@@ -78,6 +78,25 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
       }
     } catch (error) {
       console.error('Error resuming funnel:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm('Are you sure you want to delete this funnel? This action cannot be undone.')) {
+      return
+    }
+    setLoading(true)
+    try {
+      const response = await fetch(`http://localhost:8000/funnel/${funnel._id}`, {
+        method: 'DELETE'
+      })
+      if (response.ok) {
+        onUpdate()
+      }
+    } catch (error) {
+      console.error('Error deleting funnel:', error)
     } finally {
       setLoading(false)
     }
@@ -189,10 +208,20 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
             <Button 
               variant="outline" 
               className="w-full"
-              onClick={() => window.open(`/analytics/${funnel._id}`, '_blank')}
+              onClick={() => window.location.href = `/analytics/${funnel._id}`}
             >
               <BarChart3 className="mr-2 h-4 w-4" />
               View Analytics
+            </Button>
+            
+            <Button 
+              variant="destructive" 
+              className="w-full"
+              onClick={handleDelete}
+              disabled={loading}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete Funnel
             </Button>
           </TabsContent>
         </Tabs>
