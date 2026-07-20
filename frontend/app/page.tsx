@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { FunnelDashboard } from '@/components/FunnelDashboard'
 import { CreateFunnelModal } from '@/components/CreateFunnelModal'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
+import { Plus, Rocket, Cpu } from 'lucide-react'
 
 interface Funnel {
   _id: string
@@ -59,10 +60,24 @@ export default function Home() {
               Autonomous sales funnels for your Gumroad products
             </p>
           </div>
-          <Button onClick={() => setShowCreateModal(true)} size="lg">
-            <Plus className="mr-2 h-5 w-5" />
-            Create Funnel
-          </Button>
+          <div className="flex gap-2">
+            <Link href="/mission-control">
+              <Button size="lg" variant="secondary">
+                <Rocket className="mr-2 h-5 w-5" />
+                Mission Control
+              </Button>
+            </Link>
+            <Link href="/system">
+              <Button size="lg" variant="outline">
+                <Cpu className="mr-2 h-5 w-5" />
+                System
+              </Button>
+            </Link>
+            <Button onClick={() => setShowCreateModal(true)} size="lg">
+              <Plus className="mr-2 h-5 w-5" />
+              Create Funnel
+            </Button>
+          </div>
         </div>
 
         {loading ? (

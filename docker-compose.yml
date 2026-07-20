@@ -233,6 +233,18 @@ services:
       - funnel-network
     restart: unless-stopped
 
+  # empire_os API -- exposes the 36-engine governance/reasoning/research runtime
+  empire-os-api:
+    build:
+      context: ../empire_os
+      dockerfile: Dockerfile
+    container_name: traffic-funnel-empire-os
+    ports:
+      - "8100:8100"
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
   # Frontend Dashboard
   frontend:
     build:
@@ -243,8 +255,10 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_EMPIRE_API_URL=http://localhost:8100
     depends_on:
       - orchestrator
+      - empire-os-api
     networks:
       - funnel-network
     restart: unless-stopped
