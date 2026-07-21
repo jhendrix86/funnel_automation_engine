@@ -5,25 +5,49 @@ services:
   mongodb:
     image: mongo:7.0
     container_name: traffic-funnel-mongodb
+    # Default WiredTiger cache is (RAM-1GB)/2, oversized for this host's 3.7GB
+    # WSL2 budget across 13 containers. Capping it stops mongo from being the
+    # thing that gets squeezed (or squeezes everything else) under pressure.
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
+    mem_limit: 400m
     ports:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
     environment:
       MONGO_INITDB_DATABASE: traffic_funnel
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
     networks:
       - funnel-network
+    # Previously missing entirely -- the actual reason mongodb/redis were the
+    # only two services on this stack that never came back after a crash or
+    # a Docker Desktop restart, while every other service (which all have
+    # this policy) auto-resurrected around them.
+    restart: unless-stopped
 
   # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: traffic-funnel-redis
+    mem_limit: 150m
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     networks:
       - funnel-network
+    restart: unless-stopped
 
   # Orchestrator Service
   orchestrator:
@@ -47,16 +71,26 @@ services:
       - SOCIAL_SERVICE_URL=http://social-media:8007
       - LLM_SERVICE_URL=http://llm-service:8008
     depends_on:
-      - mongodb
-      - redis
-      - content-generator
-      - email-automation
-      - lead-optimizer
-      - conversion-optimizer
-      - gumroad-integration
-      - traffic-acquisition
-      - social-media
-      - llm-service
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      content-generator:
+        condition: service_started
+      email-automation:
+        condition: service_started
+      lead-optimizer:
+        condition: service_started
+      conversion-optimizer:
+        condition: service_started
+      gumroad-integration:
+        condition: service_started
+      traffic-acquisition:
+        condition: service_started
+      social-media:
+        condition: service_started
+      llm-service:
+        condition: service_started
     networks:
       - funnel-network
     restart: unless-stopped
@@ -75,9 +109,12 @@ services:
       - REDIS_URL=redis://redis:6379
       - LLM_SERVICE_URL=http://llm-service:8008
     depends_on:
-      - mongodb
-      - redis
-      - llm-service
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      llm-service:
+        condition: service_started
     networks:
       - funnel-network
     restart: unless-stopped
@@ -95,8 +132,10 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - funnel-network
     restart: unless-stopped
@@ -118,8 +157,10 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - funnel-network
     restart: unless-stopped
@@ -137,8 +178,10 @@ services:
       - MONGODB_URI=mongodb://mongodb:27017
       - REDIS_URL=redis://redis:6379
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - funnel-network
     restart: unless-stopped
@@ -157,8 +200,10 @@ services:
       - REDIS_URL=redis://redis:6379
       - GUMROAD_ACCESS_TOKEN=${GUMROAD_ACCESS_TOKEN}
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - funnel-network
     restart: unless-stopped
@@ -182,8 +227,10 @@ services:
       - LINKEDIN_ACCESS_TOKEN=${LINKEDIN_ACCESS_TOKEN}
       - FACEBOOK_ACCESS_TOKEN=${FACEBOOK_ACCESS_TOKEN}
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - funnel-network
     restart: unless-stopped
@@ -207,9 +254,12 @@ services:
       - LINKEDIN_ACCESS_TOKEN=${LINKEDIN_ACCESS_TOKEN}
       - LLM_SERVICE_URL=http://llm-service:8008
     depends_on:
-      - mongodb
-      - redis
-      - llm-service
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      llm-service:
+        condition: service_started
     networks:
       - funnel-network
     restart: unless-stopped
@@ -257,8 +307,10 @@ services:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - NEXT_PUBLIC_EMPIRE_API_URL=http://localhost:8100
     depends_on:
-      - orchestrator
-      - empire-os-api
+      orchestrator:
+        condition: service_started
+      empire-os-api:
+        condition: service_started
     networks:
       - funnel-network
     restart: unless-stopped
