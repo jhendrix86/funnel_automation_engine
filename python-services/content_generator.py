@@ -26,7 +26,7 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Initialize clients
-openai.api_key = OPENAI_API_KEY
+openai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
 mongo_client = MongoClient(MONGODB_URI)
 redis_client = redis.from_url(REDIS_URL)
 
@@ -166,7 +166,7 @@ async def generate_blog_post(request: ContentRequest) -> str:
                 return data.get('content', '')
             else:
                 # Fallback to OpenAI
-                response = await openai.ChatCompletion.acreate(
+                response = await openai_client.chat.completions.create(
                     model="gpt-4",
                     messages=[
                         {"role": "system", "content": "You are an expert content writer specializing in SEO and conversion optimization."},
@@ -216,7 +216,7 @@ async def generate_social_post(request: ContentRequest) -> str:
                 return data.get('content', '')
             else:
                 # Fallback to OpenAI
-                response = await openai.ChatCompletion.acreate(
+                response = await openai_client.chat.completions.create(
                     model="gpt-4",
                     messages=[
                         {"role": "system", "content": "You are a social media expert with high engagement rates."},
@@ -267,7 +267,7 @@ async def generate_email_copy(request: ContentRequest) -> str:
                 return data.get('content', '')
             else:
                 # Fallback to OpenAI
-                response = await openai.ChatCompletion.acreate(
+                response = await openai_client.chat.completions.create(
                     model="gpt-4",
                     messages=[
                         {"role": "system", "content": "You are an email marketing specialist with high open and click-through rates."},
@@ -310,7 +310,7 @@ async def generate_landing_page(request: ContentRequest) -> str:
                 return data.get('content', '')
             else:
                 # Fallback to OpenAI
-                response = await openai.ChatCompletion.acreate(
+                response = await openai_client.chat.completions.create(
                     model="gpt-4",
                     messages=[
                         {"role": "system", "content": "You are a conversion copywriter specializing in high-converting landing pages."},
@@ -355,7 +355,7 @@ async def generate_ad_copy(request: ContentRequest) -> str:
                 return data.get('content', '')
             else:
                 # Fallback to OpenAI
-                response = await openai.ChatCompletion.acreate(
+                response = await openai_client.chat.completions.create(
                     model="gpt-4",
                     messages=[
                         {"role": "system", "content": "You are a paid advertising specialist with high ROI campaigns."},
@@ -441,7 +441,7 @@ async def generate_optimization_suggestions(content: str, analysis: Dict, goals:
     3. Expected impact on performance
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are a content optimization expert with SEO and conversion focus."},
@@ -506,7 +506,7 @@ async def generate_content_ideas(topic: str, count: int) -> List[Dict]:
     Format as JSON array.
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are a content strategist with expertise in SEO and audience engagement."},

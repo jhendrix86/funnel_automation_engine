@@ -26,7 +26,7 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Initialize clients
-openai.api_key = OPENAI_API_KEY
+openai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
 mongo_client = MongoClient(MONGODB_URI)
 redis_client = redis.from_url(REDIS_URL)
 
@@ -395,7 +395,7 @@ async def generate_optimization_suggestions(landing_page: Dict, goals: List[str]
     Format as JSON array of suggestions.
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are a conversion rate optimization expert with proven track record of improving landing page performance."},
@@ -509,7 +509,7 @@ async def comprehensive_cro_analysis(funnel: Dict) -> List[Dict]:
     Format as JSON array.
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are a CRO expert with deep expertise in funnel optimization and user psychology."},

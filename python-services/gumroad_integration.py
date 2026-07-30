@@ -26,7 +26,7 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Initialize clients
-openai.api_key = OPENAI_API_KEY
+openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
 mongo_client = MongoClient(MONGODB_URI)
 redis_client = redis.from_url(REDIS_URL)
 
@@ -584,7 +584,7 @@ async def research_product(request: ProductResearchRequest):
         6. Potential challenges
         """
         
-        response = openai.ChatCompletion.create(
+        response = openai_client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "You are an expert product researcher and market analyst."},

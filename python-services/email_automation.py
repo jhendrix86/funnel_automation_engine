@@ -31,7 +31,7 @@ SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 
 # Initialize clients
-openai.api_key = OPENAI_API_KEY
+openai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
 mongo_client = MongoClient(MONGODB_URI)
 redis_client = redis.from_url(REDIS_URL)
 
@@ -144,7 +144,7 @@ async def optimize_email_template(template: EmailTemplate) -> EmailTemplate:
     }}
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are an email marketing optimization expert with high open and click-through rates."},

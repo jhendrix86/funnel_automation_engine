@@ -26,7 +26,7 @@ MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 # Initialize clients
-openai.api_key = OPENAI_API_KEY
+openai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
 mongo_client = MongoClient(MONGODB_URI)
 redis_client = redis.from_url(REDIS_URL)
 
@@ -472,7 +472,7 @@ async def generate_ai_nurture_campaign(request: NurtureCampaignRequest) -> Dict:
     3. Expected conversion rate estimate
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are an email marketing automation expert with high conversion rates."},

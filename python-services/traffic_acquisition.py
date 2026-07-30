@@ -32,7 +32,7 @@ LINKEDIN_ACCESS_TOKEN = os.getenv("LINKEDIN_ACCESS_TOKEN")
 FACEBOOK_ACCESS_TOKEN = os.getenv("FACEBOOK_ACCESS_TOKEN")
 
 # Initialize clients
-openai.api_key = OPENAI_API_KEY
+openai_client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
 mongo_client = MongoClient(MONGODB_URI)
 redis_client = redis.from_url(REDIS_URL)
 
@@ -215,7 +215,7 @@ async def generate_social_post_content(platform: str, funnel: Dict, target_audie
     Generate the post content.
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": f"You are a social media expert specializing in {platform} marketing with high engagement rates."},
@@ -362,7 +362,7 @@ async def generate_keywords(funnel: Dict) -> List[str]:
     Return as a comma-separated list.
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are an SEO expert with deep knowledge of keyword research and search intent."},
@@ -389,7 +389,7 @@ async def generate_seo_content_ideas(funnel: Dict, keywords: List[str]) -> List[
     Format as JSON array.
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are an SEO content strategist with expertise in content marketing and search optimization."},
@@ -449,7 +449,7 @@ async def generate_ad_creatives(campaign: TrafficCampaign, funnel: Dict) -> List
     Format as JSON array.
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are a paid advertising specialist with high ROI campaigns across multiple platforms."},
@@ -662,7 +662,7 @@ async def generate_optimization_suggestions(campaign: Dict, analytics: Dict) -> 
     Format as JSON array of actionable suggestions.
     """
     
-    response = await openai.ChatCompletion.acreate(
+    response = await openai_client.chat.completions.create(
         model="gpt-4",
         messages=[
             {"role": "system", "content": "You are a digital marketing optimization expert with proven track record of improving campaign performance."},

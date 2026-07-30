@@ -63,12 +63,12 @@ async def list_models():
     if LLM_PROVIDER == "openai":
         if OPENAI_API_KEY:
             try:
-                openai.api_key = OPENAI_API_KEY
-                models_list = openai.Model.list()
-                for model in models_list['data']:
+                client = openai.OpenAI(api_key=OPENAI_API_KEY)
+                models_list = client.models.list()
+                for model in models_list.data:
                     models.append(ModelInfo(
                         provider="openai",
-                        model=model['id'],
+                        model=model.id,
                         available=True
                     ))
             except Exception as e:
@@ -110,10 +110,10 @@ async def openai_chat_completion(request: ChatRequest, model: str):
     """OpenAI chat completion"""
     if not OPENAI_API_KEY:
         raise HTTPException(status_code=400, detail="OpenAI API key not configured")
-    
-    openai.api_key = OPENAI_API_KEY
-    
-    response = openai.ChatCompletion.create(
+
+    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+    response = client.chat.completions.create(
         model=model,
         messages=request.messages,
         temperature=request.temperature,

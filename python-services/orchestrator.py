@@ -592,6 +592,7 @@ async def launch_email_campaign(funnel_id: str) -> str:
 async def launch_seo_campaign(funnel_id: str) -> str:
     """Launch SEO campaign"""
     try:
+        funnel = funnels_collection.find_one({"_id": _to_object_id(funnel_id)}) or {}
         async with aiohttp.ClientSession() as session:
             payload = {
                 "funnel_id": funnel_id,
