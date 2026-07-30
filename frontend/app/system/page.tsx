@@ -86,7 +86,7 @@ export default function SystemPanel() {
             <h1 className="text-3xl font-bold">System</h1>
           </div>
           {apiUp !== null && (
-            <span className={`text-xs font-medium px-3 py-1 rounded-full ${apiUp ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
+            <span className={`text-xs font-medium px-3 py-1 rounded-full border ${apiUp ? 'bg-[#39ff14]/10 text-[#39ff14] border-[#39ff14]/40' : 'bg-red-500/15 text-red-400 border-red-500/40'}`}>
               {apiUp ? `empire_os live · ${engines.length} engines` : 'empire_os API unreachable'}
             </span>
           )}
@@ -105,7 +105,7 @@ export default function SystemPanel() {
         )}
 
         {loading ? (
-          <div className="text-center py-12 text-slate-500">Loading engine registry…</div>
+          <div className="text-center py-12 text-slate-300">Loading engine registry…</div>
         ) : !apiUp ? (
           <Card className="bg-[#111118] border-[#1e1e2e] p-6 text-center text-slate-400">
             Could not reach the empire_os API at {EMPIRE_API}. Is the <code className="text-violet-400">empire-os-api</code> container running?
@@ -120,11 +120,11 @@ export default function SystemPanel() {
                   className="w-full flex items-center justify-between p-4 text-left hover:bg-white/[0.02] transition-colors"
                 >
                   <span className="font-mono text-sm text-slate-200">{name}</span>
-                  {expanded === name ? <ChevronUp className="h-4 w-4 text-slate-500" /> : <ChevronDown className="h-4 w-4 text-slate-500" />}
+                  {expanded === name ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
                 </button>
                 {expanded === name && (
                   <div className="px-4 pb-4 border-t border-[#1e1e2e] pt-3">
-                    <div className="text-xs text-slate-500 mb-2">
+                    <div className="text-xs text-slate-300 mb-2">
                       Operators: {details[name]?.operators?.join(', ') || 'loading…'}
                     </div>
                     <Button

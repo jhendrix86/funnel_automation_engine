@@ -30,10 +30,10 @@ const EMPIRE_API = process.env.NEXT_PUBLIC_EMPIRE_API_URL || 'http://localhost:8
 const ORCHESTRATOR_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 function StageIcon({ status }: { status: StageStatus }) {
-  if (status === 'done') return <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+  if (status === 'done') return <CheckCircle2 className="h-5 w-5 text-[#39ff14]" />
   if (status === 'running') return <Loader2 className="h-5 w-5 text-violet-400 animate-spin" />
   if (status === 'error') return <XCircle className="h-5 w-5 text-red-400" />
-  return <Circle className="h-5 w-5 text-slate-600" />
+  return <Circle className="h-5 w-5 text-slate-500" />
 }
 
 export default function MissionControl() {
@@ -173,12 +173,12 @@ export default function MissionControl() {
           <div className="flex items-center justify-between pt-2 border-t border-[#1e1e2e]">
             <div>
               <div className="text-sm font-medium">{live ? 'LIVE — will really create a Gumroad product' : 'SIMULATE — nothing real happens'}</div>
-              <div className="text-xs text-slate-500">Research always runs for real (pure computation, no cost, no external effect).</div>
+              <div className="text-xs text-slate-300">Research always runs for real (pure computation, no cost, no external effect).</div>
             </div>
             <button
               type="button"
               onClick={() => setLive((v) => !v)}
-              className={`relative h-7 w-12 rounded-full transition-colors ${live ? 'bg-red-500' : 'bg-[#2a2a3a]'}`}
+              className={`relative h-7 w-12 rounded-full transition-colors ${live ? 'bg-red-500' : 'bg-[#39ff14]/70'}`}
               aria-pressed={live}
               aria-label="Toggle live mode"
             >
@@ -190,7 +190,7 @@ export default function MissionControl() {
             onClick={runPipeline}
             disabled={running || !productName || !productDescription}
             size="lg"
-            className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+            className="w-full bg-violet-600 hover:bg-violet-700 text-white border border-[#39ff14]/40 shadow-[0_0_24px_-4px_rgba(57,255,20,0.55)] hover:shadow-[0_0_32px_-2px_rgba(57,255,20,0.75)]"
           >
             {running ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Rocket className="mr-2 h-5 w-5" />}
             {running ? 'Running…' : live ? 'Go — Run For Real' : 'Go — Simulate'}
@@ -199,14 +199,17 @@ export default function MissionControl() {
 
         <div className="space-y-3">
           {stages.map((stage) => (
-            <Card key={stage.id} className="bg-[#111118] border-[#1e1e2e] p-4">
+            <Card
+              key={stage.id}
+              className={`bg-[#111118] p-4 border-l-2 ${stage.status === 'done' ? 'border-l-[#39ff14]' : 'border-l-[#1e1e2e]'} border-y border-r border-y-[#1e1e2e] border-r-[#1e1e2e]`}
+            >
               <div className="flex items-start gap-3">
                 <div className="mt-0.5"><StageIcon status={stage.status} /></div>
                 <div className="flex-1 min-w-0">
                   <div className="font-medium">{stage.label}</div>
-                  <div className="text-xs text-slate-500">{stage.detail}</div>
+                  <div className="text-xs text-slate-300">{stage.detail}</div>
                   {stage.result && (
-                    <div className={`text-xs mt-1 ${stage.status === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>
+                    <div className={`text-xs mt-1 ${stage.status === 'error' ? 'text-red-400' : 'text-[#39ff14]'}`}>
                       {stage.result}
                     </div>
                   )}

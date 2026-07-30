@@ -103,9 +103,9 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
   }
 
   const statusColors = {
-    draft: 'bg-gray-100 text-gray-800',
-    active: 'bg-green-100 text-green-800',
-    paused: 'bg-yellow-100 text-yellow-800'
+    draft: 'bg-gray-100 text-gray-800 dark:bg-slate-700 dark:text-slate-200',
+    active: 'bg-[#39ff14]/15 text-[#39ff14] border border-[#39ff14]/40',
+    paused: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-300 dark:border dark:border-yellow-500/40'
   }
 
   return (

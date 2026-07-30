@@ -62,8 +62,8 @@ export default function Home() {
           </div>
           <div className="flex gap-2">
             <Link href="/mission-control">
-              <Button size="lg" variant="secondary">
-                <Rocket className="mr-2 h-5 w-5" />
+              <Button size="lg" variant="secondary" className="border border-[#39ff14]/40 hover:border-[#39ff14]/70">
+                <Rocket className="mr-2 h-5 w-5 text-[#39ff14]" />
                 Mission Control
               </Button>
             </Link>
