@@ -57,30 +57,54 @@ export async function disconnectRedis(): Promise<void> {
   }
 }
 
-// Cache utility functions
+// Cache utility functions - caching is a best-effort side effect, not the
+// primary operation. Every controller call site does real Mongo work
+// (funnel.save(), lead.save(), etc.) *before* touching the cache; letting
+// a Redis hiccup (or Redis simply not being connected, e.g. under test)
+// throw out of these functions would take down an otherwise-successful
+// create/update/delete. Same "don't let a best-effort side effect destroy
+// an already-correct result" fix applied to governance-engine and
+// baselayer's event emission earlier this session - log and continue.
 export async function cacheSet(key: string, value: any, ttl: number = 3600): Promise<void> {
-  const client = getRedisClient();
-  await client.setEx(key, ttl, JSON.stringify(value));
+  try {
+    const client = getRedisClient();
+    await client.setEx(key, ttl, JSON.stringify(value));
+  } catch (error) {
+    logger.warn(`cacheSet failed for key ${key}:`, error);
+  }
 }
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
-  const client = getRedisClient();
-  const data = await client.get(key);
-  if (data) {
-    return JSON.parse(data) as T;
+  try {
+    const client = getRedisClient();
+    const data = await client.get(key);
+    if (data) {
+      return JSON.parse(data) as T;
+    }
+    return null;
+  } catch (error) {
+    logger.warn(`cacheGet failed for key ${key}:`, error);
+    return null;
   }
-  return null;
 }
 
 export async function cacheDelete(key: string): Promise<void> {
-  const client = getRedisClient();
-  await client.del(key);
+  try {
+    const client = getRedisClient();
+    await client.del(key);
+  } catch (error) {
+    logger.warn(`cacheDelete failed for key ${key}:`, error);
+  }
 }
 
 export async function cacheDeletePattern(pattern: string): Promise<void> {
-  const client = getRedisClient();
-  const keys = await client.keys(pattern);
-  if (keys.length > 0) {
-    await client.del(keys);
+  try {
+    const client = getRedisClient();
+    const keys = await client.keys(pattern);
+    if (keys.length > 0) {
+      await client.del(keys);
+    }
+  } catch (error) {
+    logger.warn(`cacheDeletePattern failed for pattern ${pattern}:`, error);
   }
 }

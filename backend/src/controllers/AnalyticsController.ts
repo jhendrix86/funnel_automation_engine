@@ -1,14 +1,22 @@
 import { Request, Response } from 'express';
-import { Funnel } from '../models/Funnel';
+import { Funnel, IFunnel } from '../models/Funnel';
 import { Lead } from '../models/Lead';
 import { AppError } from '../middleware/errorHandler';
-import { cacheGet, cacheSet } from '../services/redisService';
-import { logger } from '../utils/logger';
+import { cacheSet } from '../services/redisService';
 
 export class AnalyticsController {
   async getDashboardAnalytics(req: Request, res: Response) {
     const { timeRange = '7d' } = req.query;
-    
+
+    const dashboardData = await this.buildDashboardData(timeRange as string);
+
+    // Cache for 5 minutes
+    await cacheSet(`analytics:dashboard:${timeRange}`, dashboardData, 300);
+
+    res.json(dashboardData);
+  }
+
+  private async buildDashboardData(timeRange: string) {
     // Calculate date range
     const endDate = new Date();
     const startDate = new Date();
@@ -95,11 +103,8 @@ export class AnalyticsController {
       funnelPerformance: funnelPerformance.sort((a, b) => b.conversions - a.conversions),
       activeFunnels: funnels.length
     };
-    
-    // Cache for 5 minutes
-    await cacheSet(`analytics:dashboard:${timeRange}`, dashboardData, 300);
-    
-    res.json(dashboardData);
+
+    return dashboardData;
   }
 
   async getFunnelPerformance(req: Request, res: Response) {
@@ -361,12 +366,10 @@ export class AnalyticsController {
     if (funnelId) query.funnelId = funnelId;
     
     const leads = await Lead.find(query);
-    const funnels = funnelId 
-      ? await Funnel.findById(funnelId)
+    const funnelArray: IFunnel[] = funnelId
+      ? await Funnel.find({ _id: funnelId })
       : await Funnel.find({ status: 'active' });
-    
-    const funnelArray = Array.isArray(funnels) ? funnels : [funnels];
-    
+
     // Calculate ROI by traffic source
     const sourceROI: Record<string, any> = {};
     
@@ -447,12 +450,10 @@ export class AnalyticsController {
     );
     
     // Get current funnel states
-    const funnels = funnelId 
-      ? await Funnel.findById(funnelId)
+    const funnelArray: IFunnel[] = funnelId
+      ? await Funnel.find({ _id: funnelId })
       : await Funnel.find({ status: 'active' });
-    
-    const funnelArray = Array.isArray(funnels) ? funnels : [funnels];
-    
+
     const funnelStates = funnelArray.map(funnel => ({
       funnelId: funnel._id,
       name: funnel.name,
@@ -481,7 +482,7 @@ export class AnalyticsController {
     
     // Get comprehensive analytics
     const funnel = funnelId ? await Funnel.findById(funnelId) : null;
-    const dashboardData = await this.getDashboardAnalytics({ query: { timeRange } }, res);
+    const dashboardData = await this.buildDashboardData(timeRange);
     
     const report = {
       generatedAt: new Date(),
@@ -538,7 +539,7 @@ export class AnalyticsController {
       });
     }
     
-    if (data.overall.overallLeadRate < 5) {
+    if (data.overview.overallLeadRate < 5) {
       recommendations.push({
         type: 'lead_capture',
         priority: 'medium',
@@ -546,8 +547,8 @@ export class AnalyticsController {
       });
     }
     
-    const lowPerformingFunnels = data.funnelPerformance.filter(f => f.conversionRate < 1);
-    lowPerformingFunnels.forEach(funnel => {
+    const lowPerformingFunnels = data.funnelPerformance.filter((f: any) => f.conversionRate < 1);
+    lowPerformingFunnels.forEach((funnel: any) => {
       recommendations.push({
         type: 'funnel_optimization',
         priority: 'medium',
@@ -562,7 +563,7 @@ export class AnalyticsController {
     const pageViews: Record<string, number> = {};
     
     leads.forEach(lead => {
-      lead.behaviors.forEach(behavior => {
+      lead.behaviors.forEach((behavior: any) => {
         if (behavior.type === 'page_view' && behavior.page) {
           pageViews[behavior.page] = (pageViews[behavior.page] || 0) + 1;
         }
@@ -579,7 +580,7 @@ export class AnalyticsController {
     const activities: any[] = [];
     
     leads.forEach(lead => {
-      lead.behaviors.forEach(behavior => {
+      lead.behaviors.forEach((behavior: any) => {
         activities.push({
           leadId: lead._id,
           email: lead.email,

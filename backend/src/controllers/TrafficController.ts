@@ -3,12 +3,12 @@ import { Funnel } from '../models/Funnel';
 import { Lead } from '../models/Lead';
 import { AppError } from '../middleware/errorHandler';
 import { cacheSet, cacheGet } from '../services/redisService';
+import { emitToRoom } from '../services/socketService';
 import { logger } from '../utils/logger';
-import { io } from '../index';
 
 export class TrafficController {
   async trackTraffic(req: Request, res: Response) {
-    const { funnelId, sessionId, url, referrer, userAgent, utm } = req.body;
+    const { funnelId, referrer, utm } = req.body;
     
     // Find the funnel
     const funnel = await Funnel.findById(funnelId);
@@ -47,7 +47,7 @@ export class TrafficController {
     await cacheSet(`funnel:${funnelId}:analytics`, funnel.analytics);
     
     // Emit real-time update
-    io.to(`funnel-${funnelId}`).emit('traffic-update', {
+    emitToRoom(`funnel-${funnelId}`, 'traffic-update', {
       visitors: funnel.analytics.visitors,
       source: source,
       timestamp: new Date()
@@ -67,7 +67,8 @@ export class TrafficController {
     // Try cache first
     const cached = await cacheGet(`funnel:${funnelId}:analytics`);
     if (cached) {
-      return res.json(cached);
+      res.json(cached);
+      return;
     }
     
     const funnel = await Funnel.findById(funnelId);
@@ -112,7 +113,7 @@ export class TrafficController {
     }
     
     // Analyze traffic source performance
-    const sourcePerformance = await this.analyzeSourcePerformance(funnelId);
+    const sourcePerformance = await this.analyzeSourcePerformance(funnelId as string);
     
     res.json({
       total: funnel.analytics.visitors,

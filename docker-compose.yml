@@ -283,6 +283,31 @@ services:
       - funnel-network
     restart: unless-stopped
 
+  # Node/Express/Mongoose backend (funnels/leads CRUD + real-time analytics
+  # via Socket.IO) - was dead, uncommitted scaffold with no models until
+  # this session; now real and tenant-scoped (see src/models/tenantPlugin.ts).
+  # Was never listed here before because it was never a live service.
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: traffic-funnel-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - MONGODB_URI=mongodb://mongodb:27017/traffic-funnel
+      - REDIS_URL=redis://redis:6379
+      - FRONTEND_URL=http://localhost:3000
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - funnel-network
+    restart: unless-stopped
+
   # empire_os API -- exposes the 36-engine governance/reasoning/research runtime
   empire-os-api:
     build:

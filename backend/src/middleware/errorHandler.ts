@@ -13,7 +13,7 @@ export class AppError extends Error {
   }
 }
 
-export function errorHandler(err: Error, req: Request, res: Response, next: NextFunction) {
+export function errorHandler(err: Error, req: Request, res: Response, _next: NextFunction) {
   logger.error('Error occurred:', {
     message: err.message,
     stack: err.stack,

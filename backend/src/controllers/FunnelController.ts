@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { Funnel, IFunnel } from '../models/Funnel';
+import { Funnel } from '../models/Funnel';
 import { AppError } from '../middleware/errorHandler';
 import { cacheSet, cacheDeletePattern } from '../services/redisService';
 import { logger } from '../utils/logger';

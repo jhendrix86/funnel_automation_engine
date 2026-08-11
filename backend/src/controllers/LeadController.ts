@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
-import { Lead, ILead } from '../models/Lead';
+import { Lead } from '../models/Lead';
 import { Funnel } from '../models/Funnel';
 import { AppError } from '../middleware/errorHandler';
 import { cacheSet, cacheDeletePattern } from '../services/redisService';
+import { emitToRoom } from '../services/socketService';
 import { logger } from '../utils/logger';
-import { io } from '../index';
 
 export class LeadController {
   async createLead(req: Request, res: Response) {
@@ -63,7 +63,7 @@ export class LeadController {
     await cacheSet(`lead:${lead._id}`, lead);
     
     // Emit real-time update
-    io.to(`funnel-${funnelId}`).emit('lead-created', {
+    emitToRoom(`funnel-${funnelId}`, 'lead-created', {
       leadId: lead._id,
       email: lead.email,
       source: lead.source,
@@ -162,7 +162,7 @@ export class LeadController {
     await lead.save();
     
     // Emit real-time update
-    io.to(`funnel-${lead.funnelId}`).emit('lead-behavior', {
+    emitToRoom(`funnel-${lead.funnelId}`, 'lead-behavior', {
       leadId: lead._id,
       behaviorType: type,
       score: lead.score,
