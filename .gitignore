@@ -62,6 +62,8 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
+*.archive
+mongodb_backup_*
 
 # ML Models
 models/
