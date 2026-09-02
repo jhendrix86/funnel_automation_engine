@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { API_BASE } from '@/lib/api'
 
 interface CreateFunnelModalProps {
   onClose: () => void
@@ -59,7 +60,7 @@ export function CreateFunnelModal({ onClose, onSuccess }: CreateFunnelModalProps
         payload.gumroad_product_id = formData.gumroad_product_id
       }
 
-      const response = await fetch('http://localhost:8000/funnel/create', {
+      const response = await fetch(`${API_BASE}/funnel/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

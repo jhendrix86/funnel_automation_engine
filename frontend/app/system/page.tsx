@@ -6,8 +6,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ArrowLeft, Cpu, Play, ChevronDown, ChevronUp } from 'lucide-react'
-
-const EMPIRE_API = process.env.NEXT_PUBLIC_EMPIRE_API_URL || 'http://localhost:8100'
+import { EMPIRE_API_BASE as EMPIRE_API } from '@/lib/api'
 
 interface EngineDetail {
   name: string

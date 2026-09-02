@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Play, Pause, BarChart3, Users, DollarSign, TrendingUp, Trash2 } from 'lucide-react'
+import { API_BASE } from '@/lib/api'
 
 interface Funnel {
   _id: string
@@ -32,7 +33,7 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
   const handleLaunch = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`http://localhost:8000/funnel/${funnel._id}/launch`, {
+      const response = await fetch(`${API_BASE}/funnel/${funnel._id}/launch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -54,7 +55,7 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
   const handlePause = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`http://localhost:8000/funnel/${funnel._id}/pause`, {
+      const response = await fetch(`${API_BASE}/funnel/${funnel._id}/pause`, {
         method: 'POST'
       })
       if (response.ok) {
@@ -70,7 +71,7 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
   const handleResume = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`http://localhost:8000/funnel/${funnel._id}/resume`, {
+      const response = await fetch(`${API_BASE}/funnel/${funnel._id}/resume`, {
         method: 'POST'
       })
       if (response.ok) {
@@ -89,7 +90,7 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
     }
     setLoading(true)
     try {
-      const response = await fetch(`http://localhost:8000/funnel/${funnel._id}`, {
+      const response = await fetch(`${API_BASE}/funnel/${funnel._id}`, {
         method: 'DELETE'
       })
       if (response.ok) {

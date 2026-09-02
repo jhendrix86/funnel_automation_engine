@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, BarChart3, Users, DollarSign, TrendingUp, Mail, Target } from 'lucide-react'
+import { API_BASE } from '@/lib/api'
 
 interface AnalyticsData {
   funnel: any
@@ -41,7 +42,7 @@ export default function AnalyticsPage() {
 
   const fetchAnalytics = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/analytics/${funnelId}`)
+      const response = await fetch(`${API_BASE}/analytics/${funnelId}`)
       if (response.ok) {
         const data = await response.json()
         setAnalytics(data)

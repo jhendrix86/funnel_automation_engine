@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { CheckCircle2, Circle, Loader2, XCircle, ArrowLeft, Rocket } from 'lucide-react'
+import { API_BASE as ORCHESTRATOR_API, EMPIRE_API_BASE as EMPIRE_API } from '@/lib/api'
 
 type StageStatus = 'pending' | 'running' | 'done' | 'error'
 
@@ -25,9 +26,6 @@ const INITIAL_STAGES: Stage[] = [
   { id: 'launch', label: 'Launch', detail: 'Activate traffic, email, and SEO for the funnel', status: 'pending' },
   { id: 'tracking', label: 'Customer Tracking', detail: 'Live funnel analytics: visitors, leads, conversions, revenue', status: 'pending' },
 ]
-
-const EMPIRE_API = process.env.NEXT_PUBLIC_EMPIRE_API_URL || 'http://localhost:8100'
-const ORCHESTRATOR_API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 function StageIcon({ status }: { status: StageStatus }) {
   if (status === 'done') return <CheckCircle2 className="h-5 w-5 text-[#39ff14]" />

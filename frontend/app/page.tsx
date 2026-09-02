@@ -6,6 +6,7 @@ import { FunnelDashboard } from '@/components/FunnelDashboard'
 import { CreateFunnelModal } from '@/components/CreateFunnelModal'
 import { Button } from '@/components/ui/button'
 import { Plus, Rocket, Cpu } from 'lucide-react'
+import { API_BASE } from '@/lib/api'
 
 interface Funnel {
   _id: string
@@ -33,7 +34,7 @@ export default function Home() {
 
   const fetchFunnels = async () => {
     try {
-      const response = await fetch('http://localhost:8000/funnels')
+      const response = await fetch(`${API_BASE}/funnels`)
       const data = await response.json()
       setFunnels(data.funnels || [])
     } catch (error) {
