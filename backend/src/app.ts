@@ -1,3 +1,7 @@
+// NOTE: this Express service is NON-CANONICAL. The funnel backend of record
+// is python-services/orchestrator.py (:18000). Nothing consumes this app.
+// See ../NONCANONICAL.md and ../../BACKEND_OF_RECORD.md before building
+// against it.
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
