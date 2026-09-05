@@ -31,7 +31,14 @@ export function createApp() {
   });
 
   app.use(helmet());
-  app.use(cors());
+  // SECURITY_REVIEW.md finding #1: no wildcard-origin + credentials.
+  // Matches the ALLOWED_ORIGINS convention used fleet-wide on the Python
+  // engines - comma-separated env var, default deny-all cross-origin.
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  app.use(cors({ origin: allowedOrigins }));
   app.use(compression());
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
