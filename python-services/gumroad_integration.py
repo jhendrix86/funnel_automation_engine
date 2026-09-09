@@ -1,6 +1,15 @@
 """
 Gumroad Integration Service - Product sync and sales tracking
 Integrates with Gumroad API for autonomous funnel management
+
+KNOWN LIMITATION (verified 2026-09-08): Gumroad's real v2 API has no
+working endpoint to create or update a product - `POST /product/create`
+and `POST /product/publish` below call `https://api.gumroad.com/v2/products`
+(POST) and `/products/{id}` (PUT), both of which return a real 404 in
+production (confirmed against Gumroad's own open-source repo, issue
+antiwork/gumroad#4019, still an open feature request). Product listings
+are dashboard-only - a human has to create them in Gumroad's UI.
+`/sync/products` and `/sync/sales` (GET-only) are real and working.
 """
 import os
 import json
