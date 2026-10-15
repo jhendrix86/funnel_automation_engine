@@ -1,3 +1,11 @@
+> ## ⛔ DO NOT RUN / DO NOT DEPLOY — SECURITY WARNING
+>
+> **This stack is NOT safe to run as shipped.** The included `docker-compose.yml` publishes MongoDB (port 27017) and Redis (port 16379) with **no authentication**, the Python services expose ~70 unauthenticated FastAPI routes bound to `0.0.0.0`, the orchestrator enables credentialed wildcard CORS, and the Node backend trusts a caller-supplied `X-Tenant-ID` header. On any host reachable by other people, anyone could read or alter lead/funnel data and invoke the credentialed integrations.
+>
+> **Do not deploy or start this stack** — outside an isolated, offline local environment — until authentication and network isolation are added: database credentials/auth, database ports bound to loopback or the Compose network only, authenticated API ingress, and an explicit CORS allowlist.
+>
+> Security review 2026-10-15, finding H-02.
+
 # Traffic Funnel Engine
 
 A fully autonomous traffic funnel system for Gumroad products. This AI-powered platform automatically generates traffic, nurtures leads, optimizes conversions, and syncs with your Gumroad products to maximize sales.
