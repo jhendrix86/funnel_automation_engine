@@ -51,6 +51,18 @@ traffic-funnel-engine/
 - (Optional) Social media API keys for automated posting
 - (Optional) SMTP credentials for email sending
 
+## 🔒 Security
+
+Hardening applied on the `devin-rebuild-nov11` branch for the issues flagged in the October 2026 review (H-02):
+
+- **Database authentication** — MongoDB runs with `--auth` and a root user created from `MONGO_ROOT_USER` / `MONGO_ROOT_PASSWORD` on first initialization of an empty data volume; Redis requires `REDIS_PASSWORD`. All services connect with authenticated URIs. Note: if an existing `mongodb_data` volume already holds data, the root user is not created automatically — create it manually before starting with `--auth`, or the services will fail to connect.
+- **Databases not published** — MongoDB (27017) and Redis (6379) are reachable only on the internal Compose network; their ports are not published to the host.
+- **Loopback-only service ports** — the Python services (8000–8006) bind to 127.0.0.1 on the host.
+- **API-key authentication** — every Python service requires an `X-API-Key` header matching `FUNNEL_API_KEY` on all routes except `/health` (which is unauthenticated). The orchestrator sends the same key when calling sibling services. Requests without a valid key get a 401.
+- **CORS allowlist** — the Node backend only allows origins listed in `ALLOWED_ORIGINS` (comma-separated, default `http://localhost:3000`); credentialed cross-origin requests are only enabled for a non-wildcard list.
+
+Set the secrets in `.env` before starting the stack (see `.env.example`).
+
 ## 🔧 Installation
 
 ### 1. Clone the Repository
@@ -71,8 +83,12 @@ Edit `.env` and add your API keys:
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
 GUMROAD_ACCESS_TOKEN=your_gumroad_access_token_here
-MONGODB_URI=mongodb://localhost:27017
-REDIS_URL=redis://localhost:6379
+FUNNEL_API_KEY=change-me-to-a-long-random-string
+MONGO_ROOT_USER=admin
+MONGO_ROOT_PASSWORD=change-me-to-a-long-random-password
+REDIS_PASSWORD=change-me-to-a-long-random-password
+MONGODB_URI=mongodb://admin:change-me-to-a-long-random-password@localhost:27017/traffic_funnel?authSource=admin
+REDIS_URL=redis://:change-me-to-a-long-random-password@localhost:6379
 ```
 
 ### 3. Start with Docker Compose
@@ -82,15 +98,15 @@ docker-compose up -d
 ```
 
 This will start all services:
-- MongoDB (port 27017)
-- Redis (port 6379)
-- Orchestrator (port 8000)
-- Content Generator (port 8001)
-- Lead Optimizer (port 8002)
-- Email Automation (port 8003)
-- Conversion Optimizer (port 8004)
-- Gumroad Integration (port 8005)
-- Traffic Acquisition (port 8006)
+- MongoDB (internal only — port not published)
+- Redis (internal only — port not published)
+- Orchestrator (port 8000, loopback only)
+- Content Generator (port 8001, loopback only)
+- Lead Optimizer (port 8002, loopback only)
+- Email Automation (port 8003, loopback only)
+- Conversion Optimizer (port 8004, loopback only)
+- Gumroad Integration (port 8005, loopback only)
+- Traffic Acquisition (port 8006, loopback only)
 - Frontend Dashboard (port 3000)
 
 ### 4. Access the Dashboard

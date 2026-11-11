@@ -7,7 +7,8 @@ import json
 import asyncio
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from pymongo import MongoClient
 import redis
@@ -20,6 +21,19 @@ import aiohttp
 
 # Initialize FastAPI app
 app = FastAPI(title="Email Automation Service", version="1.0.0")
+
+# API-key authentication (H-02 hardening). Every route except /health requires
+# an X-API-Key header matching FUNNEL_API_KEY. Fails closed when the key is
+# unset or the header is missing/wrong.
+FUNNEL_API_KEY = os.getenv("FUNNEL_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_api_key(api_key: str = Depends(_api_key_header)):
+    if not FUNNEL_API_KEY or api_key != FUNNEL_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return api_key
+
 
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -82,7 +96,7 @@ class ABTestResponse(BaseModel):
     winner: Optional[str]
     confidence: float
 
-@app.post("/templates", response_model=EmailResponse)
+@app.post("/templates", response_model=EmailResponse, dependencies=[Depends(require_api_key)])
 async def create_template(template: EmailTemplate):
     """Create email template with AI optimization"""
     try:
@@ -163,7 +177,7 @@ async def optimize_email_template(template: EmailTemplate) -> EmailTemplate:
     
     return template
 
-@app.post("/campaigns", response_model=EmailResponse)
+@app.post("/campaigns", response_model=EmailResponse, dependencies=[Depends(require_api_key)])
 async def create_campaign(campaign: EmailCampaign, background_tasks: BackgroundTasks):
     """Create email campaign with automation"""
     try:
@@ -317,7 +331,7 @@ async def send_email(to_email: str, subject: str, body: str):
         print(f"Error sending email: {str(e)}")
         raise
 
-@app.post("/personalize", response_model=EmailResponse)
+@app.post("/personalize", response_model=EmailResponse, dependencies=[Depends(require_api_key)])
 async def create_personalized_email(email: PersonalizedEmail):
     """Create and send personalized email immediately"""
     try:
@@ -360,7 +374,7 @@ async def create_personalized_email(email: PersonalizedEmail):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/ab-test", response_model=ABTestResponse)
+@app.post("/ab-test", response_model=ABTestResponse, dependencies=[Depends(require_api_key)])
 async def create_ab_test(request: ABTestRequest):
     """Create A/B test for email campaign"""
     try:
@@ -390,7 +404,7 @@ async def create_ab_test(request: ABTestRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/ab-test/{test_id}")
+@app.get("/ab-test/{test_id}", dependencies=[Depends(require_api_key)])
 async def get_ab_test_results(test_id: str):
     """Get A/B test results"""
     test = db.ab_tests.find_one({"_id": test_id})
@@ -459,7 +473,7 @@ def calculate_statistical_significance(results: Dict) -> float:
     
     return confidence
 
-@app.get("/templates")
+@app.get("/templates", dependencies=[Depends(require_api_key)])
 async def get_templates(template_type: Optional[str] = None):
     """Get email templates"""
     query = {}
@@ -469,7 +483,7 @@ async def get_templates(template_type: Optional[str] = None):
     templates = list(email_templates_collection.find(query))
     return {"templates": templates}
 
-@app.get("/campaigns")
+@app.get("/campaigns", dependencies=[Depends(require_api_key)])
 async def get_campaigns(funnel_id: Optional[str] = None):
     """Get email campaigns"""
     query = {}

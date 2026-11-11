@@ -17,12 +17,24 @@ import { connectDatabase } from './services/databaseService';
 
 dotenv.config();
 
+// CORS allowlist (H-02 hardening). Origins come from ALLOWED_ORIGINS
+// (comma-separated, default http://localhost:3000). Credentials are only
+// enabled for a non-wildcard list; "*" allows any origin without credentials.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const isWildcardOrigin = allowedOrigins.length === 1 && allowedOrigins[0] === '*';
+const corsOrigin: string | string[] = isWildcardOrigin ? '*' : allowedOrigins;
+const corsCredentials = !isWildcardOrigin;
+
 const app = express();
 const httpServer = createServer(app);
 const io = new SocketServer(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || '*',
-    methods: ['GET', 'POST']
+    origin: corsOrigin,
+    methods: ['GET', 'POST'],
+    credentials: corsCredentials
   }
 });
 
@@ -35,7 +47,7 @@ const limiter = rateLimit({
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: corsOrigin, credentials: corsCredentials }));
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));

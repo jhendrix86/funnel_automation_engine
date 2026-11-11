@@ -9,7 +9,8 @@ import random
 import numpy as np
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from pymongo import MongoClient
 import redis
@@ -19,6 +20,19 @@ from dataclasses import dataclass
 
 # Initialize FastAPI app
 app = FastAPI(title="Conversion Optimization Service", version="1.0.0")
+
+# API-key authentication (H-02 hardening). Every route except /health requires
+# an X-API-Key header matching FUNNEL_API_KEY. Fails closed when the key is
+# unset or the header is missing/wrong.
+FUNNEL_API_KEY = os.getenv("FUNNEL_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_api_key(api_key: str = Depends(_api_key_header)):
+    if not FUNNEL_API_KEY or api_key != FUNNEL_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return api_key
+
 
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -89,7 +103,7 @@ class TestResult:
     is_statistically_significant: bool
     improvement_over_control: float
 
-@app.post("/ab-test/create", response_model=ABTestResponse)
+@app.post("/ab-test/create", response_model=ABTestResponse, dependencies=[Depends(require_api_key)])
 async def create_ab_test(request: ABTestRequest, background_tasks: BackgroundTasks):
     """Create new A/B test with automatic traffic allocation"""
     try:
@@ -291,7 +305,7 @@ async def implement_winning_variant(funnel_id: str, element_type: str, variant_i
     except Exception as e:
         print(f"Error implementing winning variant: {str(e)}")
 
-@app.get("/ab-test/{test_id}")
+@app.get("/ab-test/{test_id}", dependencies=[Depends(require_api_key)])
 async def get_ab_test_results(test_id: str):
     """Get A/B test results"""
     test = ab_tests_collection.find_one({"_id": test_id})
@@ -323,7 +337,7 @@ async def get_ab_test_results(test_id: str):
         "completed_at": test.get('completed_at')
     }
 
-@app.post("/optimize/landing-page")
+@app.post("/optimize/landing-page", dependencies=[Depends(require_api_key)])
 async def optimize_landing_page(request: LandingPageOptimization):
     """Generate AI-powered landing page optimization suggestions"""
     try:
@@ -440,7 +454,7 @@ def calculate_expected_improvement(suggestions: List[Dict]) -> float:
     
     return min(combined_improvement, 50)  # Cap at 50% improvement
 
-@app.post("/analyze/cro", response_model=CROAnalysis)
+@app.post("/analyze/cro", response_model=CROAnalysis, dependencies=[Depends(require_api_key)])
 async def analyze_cro(funnel_id: str, analysis_type: str = "comprehensive"):
     """Perform comprehensive CRO analysis"""
     try:
@@ -570,7 +584,7 @@ def generate_fallback_recommendations(funnel: Dict) -> List[Dict]:
         }
     ]
 
-@app.get("/ab-test/active")
+@app.get("/ab-test/active", dependencies=[Depends(require_api_key)])
 async def get_active_tests(funnel_id: Optional[str] = None):
     """Get all active A/B tests"""
     query = {"status": "running"}
@@ -580,7 +594,7 @@ async def get_active_tests(funnel_id: Optional[str] = None):
     tests = list(ab_tests_collection.find(query))
     return {"tests": tests}
 
-@app.post("/ab-test/{test_id}/stop")
+@app.post("/ab-test/{test_id}/stop", dependencies=[Depends(require_api_key)])
 async def stop_ab_test(test_id: str):
     """Stop running A/B test"""
     test = ab_tests_collection.find_one({"_id": test_id})

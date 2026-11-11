@@ -8,7 +8,8 @@ import asyncio
 import random
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from pymongo import MongoClient
 import redis
@@ -17,6 +18,19 @@ import openai
 
 # Initialize FastAPI app
 app = FastAPI(title="Traffic Acquisition Service", version="1.0.0")
+
+# API-key authentication (H-02 hardening). Every route except /health requires
+# an X-API-Key header matching FUNNEL_API_KEY. Fails closed when the key is
+# unset or the header is missing/wrong.
+FUNNEL_API_KEY = os.getenv("FUNNEL_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_api_key(api_key: str = Depends(_api_key_header)):
+    if not FUNNEL_API_KEY or api_key != FUNNEL_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return api_key
+
 
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -70,7 +84,7 @@ class TrafficResponse(BaseModel):
     message: str
     scheduled_tasks: List[str]
 
-@app.post("/campaign/create")
+@app.post("/campaign/create", dependencies=[Depends(require_api_key)])
 async def create_traffic_campaign(campaign: TrafficCampaign, background_tasks: BackgroundTasks):
     """Create and launch autonomous traffic campaign"""
     try:
@@ -462,7 +476,7 @@ async def generate_ad_creatives(campaign: TrafficCampaign, funnel: Dict) -> List
     except:
         return []
 
-@app.post("/social/post")
+@app.post("/social/post", dependencies=[Depends(require_api_key)])
 async def create_social_post(request: SocialPostRequest, background_tasks: BackgroundTasks):
     """Create and schedule individual social post"""
     try:
@@ -514,7 +528,7 @@ async def create_social_post(request: SocialPostRequest, background_tasks: Backg
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/seo/tasks")
+@app.post("/seo/tasks", dependencies=[Depends(require_api_key)])
 async def create_seo_tasks(request: SEOTaskRequest):
     """Create SEO optimization tasks"""
     try:
@@ -546,7 +560,7 @@ async def create_seo_tasks(request: SEOTaskRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/campaigns")
+@app.get("/campaigns", dependencies=[Depends(require_api_key)])
 async def get_campaigns(funnel_id: Optional[str] = None):
     """Get traffic campaigns"""
     query = {}
@@ -556,7 +570,7 @@ async def get_campaigns(funnel_id: Optional[str] = None):
     campaigns = list(traffic_campaigns_collection.find(query))
     return {"campaigns": campaigns}
 
-@app.get("/social/posts")
+@app.get("/social/posts", dependencies=[Depends(require_api_key)])
 async def get_social_posts(funnel_id: Optional[str] = None, status: Optional[str] = None):
     """Get social media posts"""
     query = {}
@@ -568,7 +582,7 @@ async def get_social_posts(funnel_id: Optional[str] = None, status: Optional[str
     posts = list(social_posts_collection.find(query))
     return {"posts": posts}
 
-@app.get("/seo/tasks")
+@app.get("/seo/tasks", dependencies=[Depends(require_api_key)])
 async def get_seo_tasks(funnel_id: Optional[str] = None):
     """Get SEO tasks"""
     query = {}
@@ -578,7 +592,7 @@ async def get_seo_tasks(funnel_id: Optional[str] = None):
     tasks = list(seo_tasks_collection.find(query))
     return {"tasks": tasks}
 
-@app.get("/analytics/{campaign_id}")
+@app.get("/analytics/{campaign_id}", dependencies=[Depends(require_api_key)])
 async def get_campaign_analytics(campaign_id: str):
     """Get analytics for a traffic campaign"""
     campaign = traffic_campaigns_collection.find_one({"_id": campaign_id})
@@ -604,7 +618,7 @@ async def get_campaign_analytics(campaign_id: str):
         "campaign_stats": campaign.get('stats', {})
     }
 
-@app.post("/optimize/{campaign_id}")
+@app.post("/optimize/{campaign_id}", dependencies=[Depends(require_api_key)])
 async def optimize_campaign(campaign_id: str):
     """Auto-optimize campaign based on performance"""
     try:

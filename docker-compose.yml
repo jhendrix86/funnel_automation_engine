@@ -2,24 +2,30 @@ version: '3.8'
 
 services:
   # MongoDB Database
+  # H-02 hardening: runs with --auth; the root user is created from
+  # MONGO_ROOT_USER / MONGO_ROOT_PASSWORD on first initialization of an empty
+  # data volume. The port is NOT published: MongoDB is reachable only on the
+  # internal Compose network.
   mongodb:
     image: mongo:7.0
     container_name: traffic-funnel-mongodb
-    ports:
-      - "27017:27017"
+    command: ["mongod", "--auth"]
     volumes:
       - mongodb_data:/data/db
     environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: traffic_funnel
     networks:
       - funnel-network
 
   # Redis Cache
+  # H-02 hardening: requires a password (--requirepass). The port is NOT
+  # published: Redis is reachable only on the internal Compose network.
   redis:
     image: redis:7-alpine
     container_name: traffic-funnel-redis
-    ports:
-      - "6379:6379"
+    command: redis-server --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
     networks:
@@ -32,11 +38,12 @@ services:
       dockerfile: Dockerfile.orchestrator
     container_name: traffic-funnel-orchestrator
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MONGODB_URI=mongodb://mongodb:27017
-      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/traffic_funnel?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - FUNNEL_API_KEY=${FUNNEL_API_KEY}
       - CONTENT_SERVICE_URL=http://content-generator:8001
       - EMAIL_SERVICE_URL=http://email-automation:8003
       - LEAD_SERVICE_URL=http://lead-optimizer:8002
@@ -63,11 +70,12 @@ services:
       dockerfile: Dockerfile.content
     container_name: traffic-funnel-content
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MONGODB_URI=mongodb://mongodb:27017
-      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/traffic_funnel?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - FUNNEL_API_KEY=${FUNNEL_API_KEY}
     depends_on:
       - mongodb
       - redis
@@ -82,11 +90,12 @@ services:
       dockerfile: Dockerfile.lead
     container_name: traffic-funnel-lead
     ports:
-      - "8002:8002"
+      - "127.0.0.1:8002:8002"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MONGODB_URI=mongodb://mongodb:27017
-      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/traffic_funnel?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - FUNNEL_API_KEY=${FUNNEL_API_KEY}
     depends_on:
       - mongodb
       - redis
@@ -101,11 +110,12 @@ services:
       dockerfile: Dockerfile.email
     container_name: traffic-funnel-email
     ports:
-      - "8003:8003"
+      - "127.0.0.1:8003:8003"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MONGODB_URI=mongodb://mongodb:27017
-      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/traffic_funnel?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - FUNNEL_API_KEY=${FUNNEL_API_KEY}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT}
       - SMTP_USER=${SMTP_USER}
@@ -124,11 +134,12 @@ services:
       dockerfile: Dockerfile.conversion
     container_name: traffic-funnel-conversion
     ports:
-      - "8004:8004"
+      - "127.0.0.1:8004:8004"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MONGODB_URI=mongodb://mongodb:27017
-      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/traffic_funnel?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - FUNNEL_API_KEY=${FUNNEL_API_KEY}
     depends_on:
       - mongodb
       - redis
@@ -143,11 +154,12 @@ services:
       dockerfile: Dockerfile.gumroad
     container_name: traffic-funnel-gumroad
     ports:
-      - "8005:8005"
+      - "127.0.0.1:8005:8005"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MONGODB_URI=mongodb://mongodb:27017
-      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/traffic_funnel?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - FUNNEL_API_KEY=${FUNNEL_API_KEY}
       - GUMROAD_ACCESS_TOKEN=${GUMROAD_ACCESS_TOKEN}
     depends_on:
       - mongodb
@@ -163,11 +175,12 @@ services:
       dockerfile: Dockerfile.traffic
     container_name: traffic-funnel-traffic
     ports:
-      - "8006:8006"
+      - "127.0.0.1:8006:8006"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - MONGODB_URI=mongodb://mongodb:27017
-      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/traffic_funnel?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - FUNNEL_API_KEY=${FUNNEL_API_KEY}
       - TWITTER_API_KEY=${TWITTER_API_KEY}
       - TWITTER_API_SECRET=${TWITTER_API_SECRET}
       - TWITTER_ACCESS_TOKEN=${TWITTER_ACCESS_TOKEN}

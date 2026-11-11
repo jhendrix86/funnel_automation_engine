@@ -8,7 +8,8 @@ import json
 import asyncio
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from pymongo import MongoClient
 import redis
@@ -17,6 +18,19 @@ import openai
 
 # Initialize FastAPI app
 app = FastAPI(title="Orchestrator Service", version="1.0.0")
+
+# API-key authentication (H-02 hardening). Every route except /health requires
+# an X-API-Key header matching FUNNEL_API_KEY. Fails closed when the key is
+# unset or the header is missing/wrong.
+FUNNEL_API_KEY = os.getenv("FUNNEL_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_api_key(api_key: str = Depends(_api_key_header)):
+    if not FUNNEL_API_KEY or api_key != FUNNEL_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return api_key
+
 
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -30,6 +44,9 @@ LEAD_SERVICE_URL = os.getenv("LEAD_SERVICE_URL", "http://localhost:8002")
 CONVERSION_SERVICE_URL = os.getenv("CONVERSION_SERVICE_URL", "http://localhost:8004")
 GUMROAD_SERVICE_URL = os.getenv("GUMROAD_SERVICE_URL", "http://localhost:8005")
 TRAFFIC_SERVICE_URL = os.getenv("TRAFFIC_SERVICE_URL", "http://localhost:8006")
+
+# Sent on every inter-service call so sibling services accept the request.
+SERVICE_HEADERS = {"X-API-Key": FUNNEL_API_KEY} if FUNNEL_API_KEY else {}
 
 # Initialize clients
 openai.api_key = OPENAI_API_KEY
@@ -82,7 +99,7 @@ async def resume_paused_workflows():
         if workflow.get('enabled'):
             asyncio.create_task(execute_workflow(str(workflow['_id'])))
 
-@app.post("/funnel/create")
+@app.post("/funnel/create", dependencies=[Depends(require_api_key)])
 async def create_autonomous_funnel(request: FunnelCreationRequest, background_tasks: BackgroundTasks):
     """Create a fully autonomous funnel from Gumroad product"""
     try:
@@ -138,7 +155,7 @@ async def fetch_gumroad_product(product_id: str) -> Optional[Dict]:
     """Fetch product from Gumroad service"""
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{GUMROAD_SERVICE_URL}/products") as response:
+            async with session.get(f"{GUMROAD_SERVICE_URL}/products", headers=SERVICE_HEADERS) as response:
                 if response.status == 200:
                     data = await response.json()
                     for product in data.get('products', []):
@@ -212,7 +229,7 @@ async def generate_initial_content(funnel_id: str, product: Dict, target_audienc
                     "tone": "professional"
                 }
                 
-                async with session.post(f"{CONTENT_SERVICE_URL}/generate", json=payload) as response:
+                async with session.post(f"{CONTENT_SERVICE_URL}/generate", json=payload, headers=SERVICE_HEADERS) as response:
                     if response.status == 200:
                         data = await response.json()
                         generated_content.append(data['content_id'])
@@ -246,7 +263,7 @@ async def setup_email_automation(funnel_id: str, target_audience: Dict) -> Dict:
                 "tags": ["welcome", "onboarding"]
             }
             
-            async with session.post(f"{EMAIL_SERVICE_URL}/templates", json=template_payload) as response:
+            async with session.post(f"{EMAIL_SERVICE_URL}/templates", json=template_payload, headers=SERVICE_HEADERS) as response:
                 if response.status == 200:
                     data = await response.json()
                     template_id = data['email_id']
@@ -261,7 +278,7 @@ async def setup_email_automation(funnel_id: str, target_audience: Dict) -> Dict:
                         "personalization": {}
                     }
                     
-                    async with session.post(f"{EMAIL_SERVICE_URL}/campaigns", json=campaign_payload) as campaign_response:
+                    async with session.post(f"{EMAIL_SERVICE_URL}/campaigns", json=campaign_payload, headers=SERVICE_HEADERS) as campaign_response:
                         if campaign_response.status == 200:
                             return {"status": "success", "template_id": template_id}
         
@@ -281,7 +298,7 @@ async def configure_lead_scoring(funnel_id: str) -> Dict:
                 "segment_count": 3
             }
             
-            async with session.post(f"{LEAD_SERVICE_URL}/segment", json=segment_payload) as response:
+            async with session.post(f"{LEAD_SERVICE_URL}/segment", json=segment_payload, headers=SERVICE_HEADERS) as response:
                 if response.status == 200:
                     return {"status": "success", "segments_configured": 3}
         
@@ -316,7 +333,7 @@ async def create_automation_workflow(funnel_id: str, request: FunnelCreationRequ
     result = automation_workflows_collection.insert_one(workflow_doc)
     return str(result.inserted_id)
 
-@app.post("/funnel/launch")
+@app.post("/funnel/launch", dependencies=[Depends(require_api_key)])
 async def launch_funnel(funnel_id: str, request: FunnelLaunchRequest, background_tasks: BackgroundTasks):
     """Launch autonomous funnel operations"""
     try:
@@ -379,7 +396,7 @@ async def launch_traffic_campaign(funnel_id: str, funnel: Dict) -> str:
                 "auto_optimize": True
             }
             
-            async with session.post(f"{TRAFFIC_SERVICE_URL}/campaign/create", json=payload) as response:
+            async with session.post(f"{TRAFFIC_SERVICE_URL}/campaign/create", json=payload, headers=SERVICE_HEADERS) as response:
                 if response.status == 200:
                     data = await response.json()
                     return data['campaign_id']
@@ -394,7 +411,7 @@ async def launch_email_campaign(funnel_id: str) -> str:
     try:
         async with aiohttp.ClientSession() as session:
             # Get existing templates
-            async with session.get(f"{EMAIL_SERVICE_URL}/templates") as response:
+            async with session.get(f"{EMAIL_SERVICE_URL}/templates", headers=SERVICE_HEADERS) as response:
                 if response.status == 200:
                     data = await response.json()
                     if data.get('templates'):
@@ -409,7 +426,7 @@ async def launch_email_campaign(funnel_id: str) -> str:
                             "personalization": {}
                         }
                         
-                        async with session.post(f"{EMAIL_SERVICE_URL}/campaigns", json=payload) as campaign_response:
+                        async with session.post(f"{EMAIL_SERVICE_URL}/campaigns", json=payload, headers=SERVICE_HEADERS) as campaign_response:
                             if campaign_response.status == 200:
                                 campaign_data = await campaign_response.json()
                                 return campaign_data['email_id']
@@ -430,7 +447,7 @@ async def launch_seo_campaign(funnel_id: str) -> str:
                 "priority": "high"
             }
             
-            async with session.post(f"{TRAFFIC_SERVICE_URL}/seo/tasks", json=payload) as response:
+            async with session.post(f"{TRAFFIC_SERVICE_URL}/seo/tasks", json=payload, headers=SERVICE_HEADERS) as response:
                 if response.status == 200:
                     data = await response.json()
                     return f"{data['tasks_created']} tasks created"
@@ -479,7 +496,7 @@ async def sync_gumroad_data(funnel_id: str):
     """Sync Gumroad sales and product data"""
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(f"{GUMROAD_SERVICE_URL}/sync/sales") as response:
+            async with session.post(f"{GUMROAD_SERVICE_URL}/sync/sales", headers=SERVICE_HEADERS) as response:
                 if response.status == 200:
                     print(f"Gumroad data synced for funnel {funnel_id}")
     except:
@@ -490,7 +507,7 @@ async def run_ab_tests(funnel_id: str):
     try:
         async with aiohttp.ClientSession() as session:
             # Check for active tests
-            async with session.get(f"{CONVERSION_SERVICE_URL}/ab-test/active?funnel_id={funnel_id}") as response:
+            async with session.get(f"{CONVERSION_SERVICE_URL}/ab-test/active?funnel_id={funnel_id}", headers=SERVICE_HEADERS) as response:
                 if response.status == 200:
                     data = await response.json()
                     if not data.get('tests'):
@@ -507,7 +524,7 @@ async def run_ab_tests(funnel_id: str):
                             "test_duration_days": 7
                         }
                         
-                        async with session.post(f"{CONVERSION_SERVICE_URL}/ab-test/create", json=test_payload) as test_response:
+                        async with session.post(f"{CONVERSION_SERVICE_URL}/ab-test/create", json=test_payload, headers=SERVICE_HEADERS) as test_response:
                             if test_response.status == 200:
                                 print(f"A/B test created for funnel {funnel_id}")
     except:
@@ -517,7 +534,7 @@ async def optimize_content(funnel_id: str):
     """Optimize content based on performance"""
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"{CONTENT_SERVICE_URL}/health") as response:
+            async with session.get(f"{CONTENT_SERVICE_URL}/health", headers=SERVICE_HEADERS) as response:
                 if response.status == 200:
                     # Content optimization logic would go here
                     pass
@@ -562,7 +579,7 @@ async def update_funnel_analytics(funnel_id: str):
     except:
         pass
 
-@app.post("/workflow/create")
+@app.post("/workflow/create", dependencies=[Depends(require_api_key)])
 async def create_workflow(workflow: AutomationWorkflow):
     """Create custom automation workflow"""
     try:
@@ -588,7 +605,7 @@ async def create_workflow(workflow: AutomationWorkflow):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/workflow/{workflow_id}/execute")
+@app.post("/workflow/{workflow_id}/execute", dependencies=[Depends(require_api_key)])
 async def execute_workflow_endpoint(workflow_id: str, background_tasks: BackgroundTasks):
     """Manually execute a workflow"""
     background_tasks.add_task(execute_workflow, workflow_id)
@@ -645,7 +662,7 @@ async def execute_workflow_action(action: Dict):
         # Trigger traffic generation
         pass
 
-@app.get("/funnels")
+@app.get("/funnels", dependencies=[Depends(require_api_key)])
 async def get_funnels(status: Optional[str] = None):
     """Get all funnels"""
     query = {}
@@ -655,7 +672,7 @@ async def get_funnels(status: Optional[str] = None):
     funnels = list(funnels_collection.find(query))
     return {"funnels": funnels}
 
-@app.get("/funnel/{funnel_id}")
+@app.get("/funnel/{funnel_id}", dependencies=[Depends(require_api_key)])
 async def get_funnel(funnel_id: str):
     """Get specific funnel details"""
     funnel = funnels_collection.find_one({"_id": funnel_id})
@@ -672,7 +689,7 @@ async def get_funnel(funnel_id: str):
         "traffic_campaigns": traffic_campaigns
     }
 
-@app.get("/analytics/{funnel_id}")
+@app.get("/analytics/{funnel_id}", dependencies=[Depends(require_api_key)])
 async def get_funnel_analytics(funnel_id: str):
     """Get comprehensive funnel analytics"""
     funnel = funnels_collection.find_one({"_id": funnel_id})
@@ -714,7 +731,7 @@ async def get_funnel_analytics(funnel_id: str):
         }
     }
 
-@app.post("/funnel/{funnel_id}/pause")
+@app.post("/funnel/{funnel_id}/pause", dependencies=[Depends(require_api_key)])
 async def pause_funnel(funnel_id: str):
     """Pause funnel operations"""
     funnels_collection.update_one(
@@ -730,7 +747,7 @@ async def pause_funnel(funnel_id: str):
     
     return {"status": "paused", "message": "Funnel operations paused"}
 
-@app.post("/funnel/{funnel_id}/resume")
+@app.post("/funnel/{funnel_id}/resume", dependencies=[Depends(require_api_key)])
 async def resume_funnel(funnel_id: str, background_tasks: BackgroundTasks):
     """Resume funnel operations"""
     funnels_collection.update_one(

@@ -7,7 +7,8 @@ import json
 import asyncio
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from pymongo import MongoClient
 import redis
@@ -19,6 +20,19 @@ import openai
 
 # Initialize FastAPI app
 app = FastAPI(title="Lead Optimization Service", version="1.0.0")
+
+# API-key authentication (H-02 hardening). Every route except /health requires
+# an X-API-Key header matching FUNNEL_API_KEY. Fails closed when the key is
+# unset or the header is missing/wrong.
+FUNNEL_API_KEY = os.getenv("FUNNEL_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_api_key(api_key: str = Depends(_api_key_header)):
+    if not FUNNEL_API_KEY or api_key != FUNNEL_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return api_key
+
 
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -113,7 +127,7 @@ async def startup_event():
     """Initialize ML model on startup"""
     load_ml_model()
 
-@app.post("/score", response_model=LeadScoreResponse)
+@app.post("/score", response_model=LeadScoreResponse, dependencies=[Depends(require_api_key)])
 async def score_lead(request: LeadScoreRequest):
     """
     Score a lead based on behaviors, demographics, and custom data
@@ -293,7 +307,7 @@ def suggest_next_best_action(score: int, behaviors: List[Dict]) -> str:
     else:
         return "Continue current nurture sequence"
 
-@app.post("/segment", response_model=SegmentResponse)
+@app.post("/segment", response_model=SegmentResponse, dependencies=[Depends(require_api_key)])
 async def segment_leads(request: SegmentRequest):
     """
     Segment leads based on criteria using ML clustering
@@ -417,7 +431,7 @@ def generate_segment_recommendations(characteristics: Dict[str, Dict]) -> Dict[s
     
     return recommendations
 
-@app.post("/nurture-campaign", response_model=NurtureCampaignResponse)
+@app.post("/nurture-campaign", response_model=NurtureCampaignResponse, dependencies=[Depends(require_api_key)])
 async def create_nurture_campaign(request: NurtureCampaignRequest):
     """
     Generate AI-powered nurture campaign for a segment

@@ -7,7 +7,8 @@ import json
 import asyncio
 from typing import List, Dict, Optional
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 import openai
 from pymongo import MongoClient
@@ -18,6 +19,19 @@ from sklearn.cluster import KMeans
 
 # Initialize FastAPI app
 app = FastAPI(title="Content Generation Service", version="1.0.0")
+
+# API-key authentication (H-02 hardening). Every route except /health requires
+# an X-API-Key header matching FUNNEL_API_KEY. Fails closed when the key is
+# unset or the header is missing/wrong.
+FUNNEL_API_KEY = os.getenv("FUNNEL_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_api_key(api_key: str = Depends(_api_key_header)):
+    if not FUNNEL_API_KEY or api_key != FUNNEL_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return api_key
+
 
 # Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -59,7 +73,7 @@ class ContentClusterRequest(BaseModel):
     topics: List[str]
     cluster_count: int = 5
 
-@app.post("/generate", response_model=ContentResponse)
+@app.post("/generate", response_model=ContentResponse, dependencies=[Depends(require_api_key)])
 async def generate_content(request: ContentRequest, background_tasks: BackgroundTasks):
     """
     Generate content based on funnel and content type
@@ -305,7 +319,7 @@ async def generate_ad_copy(request: ContentRequest) -> str:
     
     return response.choices[0].message.content
 
-@app.post("/optimize")
+@app.post("/optimize", dependencies=[Depends(require_api_key)])
 async def optimize_content(optimizer: ContentOptimizer):
     """
     Optimize existing content for better performance
@@ -395,7 +409,7 @@ async def generate_optimization_suggestions(content: str, analysis: Dict, goals:
         "rewritten_content": content  # Would be parsed from response in production
     }
 
-@app.post("/content-clusters")
+@app.post("/content-clusters", dependencies=[Depends(require_api_key)])
 async def create_content_clusters(request: ContentClusterRequest):
     """
     Create content clusters for SEO strategy

@@ -7,7 +7,8 @@ import json
 import asyncio
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from pymongo import MongoClient
 import redis
@@ -16,6 +17,19 @@ import openai
 
 # Initialize FastAPI app
 app = FastAPI(title="Gumroad Integration Service", version="1.0.0")
+
+# API-key authentication (H-02 hardening). Every route except /health requires
+# an X-API-Key header matching FUNNEL_API_KEY. Fails closed when the key is
+# unset or the header is missing/wrong.
+FUNNEL_API_KEY = os.getenv("FUNNEL_API_KEY", "")
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_api_key(api_key: str = Depends(_api_key_header)):
+    if not FUNNEL_API_KEY or api_key != FUNNEL_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return api_key
+
 
 # Configuration
 GUMROAD_ACCESS_TOKEN = os.getenv("GUMROAD_ACCESS_TOKEN")
@@ -69,7 +83,7 @@ class FunnelMapping(BaseModel):
     auto_sync: bool = True
     lead_source: str = "gumroad"
 
-@app.post("/sync/products")
+@app.post("/sync/products", dependencies=[Depends(require_api_key)])
 async def sync_products(background_tasks: BackgroundTasks):
     """Sync all products from Gumroad"""
     try:
@@ -135,7 +149,7 @@ async def fetch_gumroad_products() -> List[Dict]:
             data = await response.json()
             return data.get('products', [])
 
-@app.post("/sync/sales")
+@app.post("/sync/sales", dependencies=[Depends(require_api_key)])
 async def sync_sales(product_id: Optional[str] = None, background_tasks: BackgroundTasks = None):
     """Sync sales from Gumroad"""
     try:
@@ -311,7 +325,7 @@ async def update_product_analytics():
             }
         )
 
-@app.post("/map-funnel")
+@app.post("/map-funnel", dependencies=[Depends(require_api_key)])
 async def map_product_to_funnel(mapping: FunnelMapping):
     """Map a Gumroad product to a funnel"""
     try:
@@ -357,7 +371,7 @@ async def map_product_to_funnel(mapping: FunnelMapping):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/products")
+@app.get("/products", dependencies=[Depends(require_api_key)])
 async def get_products(funnel_id: Optional[str] = None):
     """Get all Gumroad products"""
     query = {}
@@ -367,7 +381,7 @@ async def get_products(funnel_id: Optional[str] = None):
     products = list(gumroad_products_collection.find(query))
     return {"products": products}
 
-@app.get("/sales")
+@app.get("/sales", dependencies=[Depends(require_api_key)])
 async def get_sales(product_id: Optional[str] = None, funnel_id: Optional[str] = None):
     """Get Gumroad sales"""
     query = {}
@@ -379,7 +393,7 @@ async def get_sales(product_id: Optional[str] = None, funnel_id: Optional[str] =
     sales = list(gumroad_sales_collection.find(query))
     return {"sales": sales}
 
-@app.get("/customers")
+@app.get("/customers", dependencies=[Depends(require_api_key)])
 async def get_customers(funnel_id: Optional[str] = None):
     """Get Gumroad customers"""
     query = {}
@@ -389,7 +403,7 @@ async def get_customers(funnel_id: Optional[str] = None):
     customers = list(gumroad_customers_collection.find(query))
     return {"customers": customers}
 
-@app.get("/analytics/{product_id}")
+@app.get("/analytics/{product_id}", dependencies=[Depends(require_api_key)])
 async def get_product_analytics(product_id: str):
     """Get analytics for a specific product"""
     product = gumroad_products_collection.find_one({"product_id": product_id})
@@ -419,7 +433,7 @@ async def get_product_analytics(product_id: str):
         "avg_order_value": sum(s['amount'] for s in sales) / len(sales) if sales else 0
     }
 
-@app.post("/auto-sync/enable")
+@app.post("/auto-sync/enable", dependencies=[Depends(require_api_key)])
 async def enable_auto_sync():
     """Enable automatic sync for all mapped products"""
     try:
