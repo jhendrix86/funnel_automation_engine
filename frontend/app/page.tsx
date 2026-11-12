@@ -32,7 +32,7 @@ export default function Home() {
 
   const fetchFunnels = async () => {
     try {
-      const response = await fetch('http://localhost:8000/funnels')
+      const response = await fetch('/api/funnel/funnels')
       const data = await response.json()
       setFunnels(data.funnels || [])
     } catch (error) {

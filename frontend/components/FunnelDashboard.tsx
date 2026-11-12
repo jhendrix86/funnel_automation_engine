@@ -32,7 +32,7 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
   const handleLaunch = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`http://localhost:8000/funnel/${funnel._id}/launch`, {
+      const response = await fetch(`/api/funnel/funnel/${funnel._id}/launch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -54,7 +54,7 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
   const handlePause = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`http://localhost:8000/funnel/${funnel._id}/pause`, {
+      const response = await fetch(`/api/funnel/funnel/${funnel._id}/pause`, {
         method: 'POST'
       })
       if (response.ok) {
@@ -70,7 +70,7 @@ export function FunnelDashboard({ funnel, onUpdate }: FunnelDashboardProps) {
   const handleResume = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`http://localhost:8000/funnel/${funnel._id}/resume`, {
+      const response = await fetch(`/api/funnel/funnel/${funnel._id}/resume`, {
         method: 'POST'
       })
       if (response.ok) {
